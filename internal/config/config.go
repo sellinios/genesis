@@ -31,13 +31,13 @@ func (SystemConfig) TableName() string {
 
 // SystemSetup tracks installation status
 type SystemSetup struct {
-	ID              uuid.UUID  `gorm:"type:uuid;primary_key;default:uuid_generate_v4()"`
-	SetupCompleted  bool       `gorm:"default:false"`
-	SetupStep       int        `gorm:"default:0"`
-	SuperAdminID    *uuid.UUID `gorm:"type:uuid"`
-	InstalledAt     *time.Time
-	GenesisVersion  string `gorm:"size:20"`
-	CreatedAt       time.Time
+	ID             uuid.UUID  `gorm:"type:uuid;primary_key;default:uuid_generate_v4()"`
+	SetupCompleted bool       `gorm:"default:false"`
+	SetupStep      int        `gorm:"default:0"`
+	SuperAdminID   *uuid.UUID `gorm:"type:uuid"`
+	InstalledAt    *time.Time
+	GenesisVersion string `gorm:"size:20"`
+	CreatedAt      time.Time
 }
 
 // TableName returns the table name for SystemSetup
@@ -240,10 +240,10 @@ func (s *ConfigService) CompleteSetup(superAdminID uuid.UUID, version string) er
 	return s.db.Model(&SystemSetup{}).
 		Where("1=1").
 		Updates(map[string]interface{}{
-			"setup_completed":  true,
-			"super_admin_id":   superAdminID,
-			"installed_at":     now,
-			"genesis_version":  version,
+			"setup_completed": true,
+			"super_admin_id":  superAdminID,
+			"installed_at":    now,
+			"genesis_version": version,
 		}).Error
 }
 
@@ -270,12 +270,12 @@ func (s *ConfigService) SetupDefaultConfig() error {
 		"SERVER_WRITE_TIMEOUT": {"30", "server", false},
 
 		// Auth
-		"JWT_SECRET":            {GenerateJWTSecret(), "auth", true},
-		"JWT_ACCESS_EXPIRY":     {"24", "auth", false},
-		"JWT_REFRESH_EXPIRY":    {"168", "auth", false}, // 7 days in hours
+		"JWT_SECRET":         {GenerateJWTSecret(), "auth", true},
+		"JWT_ACCESS_EXPIRY":  {"24", "auth", false},
+		"JWT_REFRESH_EXPIRY": {"168", "auth", false}, // 7 days in hours
 
 		// CORS
-		"CORS_ALLOWED_ORIGINS": {"http://localhost:3000,http://localhost:8080", "cors", false},
+		"CORS_ALLOWED_ORIGINS":   {"http://localhost:3000,http://localhost:8080", "cors", false},
 		"CORS_ALLOW_CREDENTIALS": {"true", "cors", false},
 	}
 

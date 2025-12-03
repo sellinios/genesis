@@ -33,13 +33,13 @@ func NewDataEngine(db *gorm.DB, schemaEngine *SchemaEngine) *DataEngine {
 
 // QueryParams represents parameters for listing/filtering data
 type QueryParams struct {
-	Page      int                    `json:"page"`
-	PageSize  int                    `json:"page_size"`
-	Sort      string                 `json:"sort"`
-	SortDir   string                 `json:"sort_dir"`
-	Search    string                 `json:"search"`
-	Filters   map[string]interface{} `json:"filters"`
-	Include   []string               `json:"include"` // Relations to include
+	Page     int                    `json:"page"`
+	PageSize int                    `json:"page_size"`
+	Sort     string                 `json:"sort"`
+	SortDir  string                 `json:"sort_dir"`
+	Search   string                 `json:"search"`
+	Filters  map[string]interface{} `json:"filters"`
+	Include  []string               `json:"include"` // Relations to include
 }
 
 // QueryResult represents the result of a list query

@@ -47,11 +47,11 @@ func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *Auth
 	// ==========================================================================
 	// AUTH API - Authentication endpoints (no auth required)
 	// ==========================================================================
-	auth := r.Group("/auth")
+	authRoutes := r.Group("/auth")
 	{
-		auth.POST("/login", authHandler.Login)
-		auth.POST("/register", authHandler.Register)
-		auth.POST("/refresh", authHandler.RefreshToken)
+		authRoutes.POST("/login", authHandler.Login)
+		authRoutes.POST("/register", authHandler.Register)
+		authRoutes.POST("/refresh", authHandler.RefreshToken)
 	}
 
 	// Authenticated auth endpoints

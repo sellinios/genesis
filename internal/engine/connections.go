@@ -15,8 +15,8 @@ import (
 
 	"github.com/aethra/genesis/internal/models"
 
-	"github.com/google/uuid"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"gorm.io/gorm"
 )

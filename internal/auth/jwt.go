@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Claims represents JWT claims for Genesis
@@ -46,7 +47,7 @@ func NewJWTService() *JWTService {
 		fmt.Println("⚠️  Warning: JWT_SECRET not set, using random secret (not suitable for production)")
 	}
 
-	accessExpiry := 24 * time.Hour  // 24 hours default
+	accessExpiry := 24 * time.Hour      // 24 hours default
 	refreshExpiry := 7 * 24 * time.Hour // 7 days default
 
 	if exp := os.Getenv("JWT_ACCESS_EXPIRY_HOURS"); exp != "" {
@@ -168,18 +169,16 @@ func generateRandomSecret() string {
 }
 
 // HashPassword hashes a password using bcrypt
-// Note: Import "golang.org/x/crypto/bcrypt" if you want to use this
 func HashPassword(password string) (string, error) {
-	// For now, return a placeholder - implement with bcrypt
-	// hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	// return string(hash), err
-	return password, nil // TODO: Implement bcrypt
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash password: %w", err)
+	}
+	return string(hash), nil
 }
 
-// CheckPassword verifies a password against a hash
+// CheckPassword verifies a password against a bcrypt hash
 func CheckPassword(password, hash string) bool {
-	// For now, direct comparison - implement with bcrypt
-	// err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	// return err == nil
-	return password == hash // TODO: Implement bcrypt
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
 }

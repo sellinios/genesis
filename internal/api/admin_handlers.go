@@ -4,6 +4,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/aethra/genesis/internal/auth"
 	"github.com/aethra/genesis/internal/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -803,12 +804,18 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	// TODO: Hash password properly with bcrypt
+	// Hash password with bcrypt
+	passwordHash, err := auth.HashPassword(input.Password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process password"})
+		return
+	}
+
 	user := models.User{
 		ID:           uuid.New(),
 		TenantID:     tenantID,
 		Email:        input.Email,
-		PasswordHash: input.Password, // TODO: bcrypt hash
+		PasswordHash: passwordHash,
 		FirstName:    input.FirstName,
 		LastName:     input.LastName,
 		Settings:     models.JSONB(input.Settings),
