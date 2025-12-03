@@ -162,14 +162,14 @@ func ToHTTPError(err error) (int, map[string]interface{}) {
 	// Check if it's a GenesisError
 	if ge, ok := err.(GenesisError); ok {
 		return ge.HTTPStatus(), map[string]interface{}{
-			"error": ge.Code(),
+			"error":   ge.Code(),
 			"message": ge.Error(),
 		}
 	}
 
 	// Default to internal server error for unknown errors
 	return http.StatusInternalServerError, map[string]interface{}{
-		"error": "INTERNAL_ERROR",
+		"error":   "INTERNAL_ERROR",
 		"message": "internal server error",
 	}
 }

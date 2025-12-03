@@ -26,11 +26,11 @@ type DataConnection struct {
 	Driver string `json:"driver" gorm:"not null;size:30"` // postgres, mysql, sqlite, mongodb, mssql, oracle
 
 	// Connection details
-	Host               string `json:"host" gorm:"size:255"`
-	Port               int    `json:"port"`
-	DatabaseName       string `json:"database_name" gorm:"size:100"`
-	Username           string `json:"username" gorm:"size:100"`
-	PasswordEncrypted  string `json:"-" gorm:"column:password_encrypted"` // Hidden from JSON
+	Host              string `json:"host" gorm:"size:255"`
+	Port              int    `json:"port"`
+	DatabaseName      string `json:"database_name" gorm:"size:100"`
+	Username          string `json:"username" gorm:"size:100"`
+	PasswordEncrypted string `json:"-" gorm:"column:password_encrypted"` // Hidden from JSON
 
 	// Connection string (alternative)
 	ConnectionStringEncrypted string `json:"-" gorm:"column:connection_string_encrypted"`
@@ -101,10 +101,10 @@ type WebService struct {
 	TimeoutWrite   int `json:"timeout_write" gorm:"default:30000"`
 
 	// Retry configuration
-	RetryEnabled        bool          `json:"retry_enabled" gorm:"default:true"`
-	RetryMaxAttempts    int           `json:"retry_max_attempts" gorm:"default:3"`
-	RetryDelayMs        int           `json:"retry_delay_ms" gorm:"default:1000"`
-	RetryOnStatusCodes  pq.Int32Array `json:"retry_on_status_codes" gorm:"type:integer[]"`
+	RetryEnabled       bool          `json:"retry_enabled" gorm:"default:true"`
+	RetryMaxAttempts   int           `json:"retry_max_attempts" gorm:"default:3"`
+	RetryDelayMs       int           `json:"retry_delay_ms" gorm:"default:1000"`
+	RetryOnStatusCodes pq.Int32Array `json:"retry_on_status_codes" gorm:"type:integer[]"`
 
 	// Rate limiting
 	RateLimitRequests      *int `json:"rate_limit_requests"`
@@ -205,8 +205,8 @@ type DataMapping struct {
 	SourceType string `json:"source_type" gorm:"not null;size:20"` // database, web_service
 
 	// Source references
-	DataConnectionID       *uuid.UUID `json:"data_connection_id" gorm:"type:uuid"`
-	WebServiceEndpointID   *uuid.UUID `json:"web_service_endpoint_id" gorm:"type:uuid"`
+	DataConnectionID     *uuid.UUID `json:"data_connection_id" gorm:"type:uuid"`
+	WebServiceEndpointID *uuid.UUID `json:"web_service_endpoint_id" gorm:"type:uuid"`
 
 	// For database sources
 	SourceQuery string `json:"source_query"`
@@ -218,12 +218,12 @@ type DataMapping struct {
 	FieldMappings JSONB `json:"field_mappings" gorm:"type:jsonb;not null;default:'[]'"`
 
 	// Sync configuration
-	SyncMode      string `json:"sync_mode" gorm:"size:20;default:'manual'"` // manual, scheduled, realtime, on_demand
+	SyncMode      string `json:"sync_mode" gorm:"size:20;default:'manual'"`      // manual, scheduled, realtime, on_demand
 	SyncDirection string `json:"sync_direction" gorm:"size:20;default:'import'"` // import, export, bidirectional
-	SyncSchedule  string `json:"sync_schedule" gorm:"size:100"` // Cron expression
+	SyncSchedule  string `json:"sync_schedule" gorm:"size:100"`                  // Cron expression
 
 	// Conflict resolution
-	ConflictStrategy string        `json:"conflict_strategy" gorm:"size:20;default:'skip'"` // skip, overwrite, merge, error
+	ConflictStrategy string         `json:"conflict_strategy" gorm:"size:20;default:'skip'"` // skip, overwrite, merge, error
 	UniqueKeyFields  pq.StringArray `json:"unique_key_fields" gorm:"type:text[]"`
 
 	// Filters
@@ -266,12 +266,12 @@ type SyncLog struct {
 	CompletedAt *time.Time `json:"completed_at"`
 
 	// Results
-	Status          string `json:"status" gorm:"not null;size:20;default:'running'"` // running, success, partial, failed
-	RecordsFetched  int    `json:"records_fetched" gorm:"default:0"`
-	RecordsCreated  int    `json:"records_created" gorm:"default:0"`
-	RecordsUpdated  int    `json:"records_updated" gorm:"default:0"`
-	RecordsSkipped  int    `json:"records_skipped" gorm:"default:0"`
-	RecordsFailed   int    `json:"records_failed" gorm:"default:0"`
+	Status         string `json:"status" gorm:"not null;size:20;default:'running'"` // running, success, partial, failed
+	RecordsFetched int    `json:"records_fetched" gorm:"default:0"`
+	RecordsCreated int    `json:"records_created" gorm:"default:0"`
+	RecordsUpdated int    `json:"records_updated" gorm:"default:0"`
+	RecordsSkipped int    `json:"records_skipped" gorm:"default:0"`
+	RecordsFailed  int    `json:"records_failed" gorm:"default:0"`
 
 	// Errors
 	Errors JSONB `json:"errors" gorm:"type:jsonb;default:'[]'"`

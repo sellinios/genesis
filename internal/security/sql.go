@@ -114,16 +114,16 @@ func isReservedWord(word string) bool {
 
 // AllowedFilterOperators defines the allowed comparison operators for filters
 var AllowedFilterOperators = map[string]string{
-	"eq":  "=",
-	"ne":  "!=",
-	"gt":  ">",
-	"gte": ">=",
-	"lt":  "<",
-	"lte": "<=",
-	"in":  "IN",
-	"nin": "NOT IN",
-	"like": "ILIKE",
-	"null": "IS NULL",
+	"eq":      "=",
+	"ne":      "!=",
+	"gt":      ">",
+	"gte":     ">=",
+	"lt":      "<",
+	"lte":     "<=",
+	"in":      "IN",
+	"nin":     "NOT IN",
+	"like":    "ILIKE",
+	"null":    "IS NULL",
 	"notnull": "IS NOT NULL",
 }
 

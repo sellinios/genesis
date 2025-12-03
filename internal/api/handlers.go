@@ -4,16 +4,21 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
+	"github.com/aethra/genesis/internal/auth"
 	"github.com/aethra/genesis/internal/engine"
+	"github.com/aethra/genesis/internal/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 // Handler contains all API handlers
 type Handler struct {
-	schemaEngine *engine.SchemaEngine
-	dataEngine   *engine.DataEngine
+	schemaEngine      *engine.SchemaEngine
+	dataEngine        *engine.DataEngine
+	jwtService        *auth.JWTService
+	permissionService *auth.PermissionService
 }
 
 // NewHandler creates a new API handler
@@ -21,6 +26,17 @@ func NewHandler(schemaEngine *engine.SchemaEngine, dataEngine *engine.DataEngine
 	return &Handler{
 		schemaEngine: schemaEngine,
 		dataEngine:   dataEngine,
+		jwtService:   auth.NewJWTService(),
+	}
+}
+
+// NewHandlerWithPermissions creates a new API handler with permission checking
+func NewHandlerWithPermissions(schemaEngine *engine.SchemaEngine, dataEngine *engine.DataEngine, permService *auth.PermissionService) *Handler {
+	return &Handler{
+		schemaEngine:      schemaEngine,
+		dataEngine:        dataEngine,
+		jwtService:        auth.NewJWTService(),
+		permissionService: permService,
 	}
 }
 
@@ -56,17 +72,109 @@ func (h *Handler) TenantMiddleware() gin.HandlerFunc {
 	}
 }
 
-// UserMiddleware extracts user from JWT token (simplified for now)
+// UserMiddleware extracts user from JWT token
 func (h *Handler) UserMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: Implement JWT validation
-		// For now, just get user_id from header
-		userIDStr := c.GetHeader("X-User-ID")
-		if userIDStr != "" {
-			if userID, err := uuid.Parse(userIDStr); err == nil {
-				c.Set("user_id", userID)
+		// Get Authorization header
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			// No auth header - continue without user context (for optional auth)
+			c.Next()
+			return
+		}
+
+		// Check Bearer prefix
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid authorization header format"})
+			c.Abort()
+			return
+		}
+
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+		// Validate token
+		claims, err := h.jwtService.ValidateToken(tokenString)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+			c.Abort()
+			return
+		}
+
+		// Set user context
+		c.Set("user_id", claims.UserID)
+		c.Set("user_email", claims.Email)
+		c.Set("user_roles", claims.Roles)
+
+		// Validate tenant matches (if tenant_id is set)
+		if tenantID, exists := c.Get("tenant_id"); exists {
+			if tid, ok := tenantID.(uuid.UUID); ok && tid != claims.TenantID {
+				c.JSON(http.StatusForbidden, gin.H{"error": "user does not belong to this tenant"})
+				c.Abort()
+				return
 			}
 		}
+
+		c.Next()
+	}
+}
+
+// RequireAuthMiddleware requires authentication (must be used after UserMiddleware)
+func (h *Handler) RequireAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if _, exists := c.Get("user_id"); !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// PermissionMiddleware checks if user has permission for the requested action
+func (h *Handler) PermissionMiddleware(action auth.Action) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Skip if no permission service configured
+		if h.permissionService == nil {
+			c.Next()
+			return
+		}
+
+		// Get required context
+		userID, userExists := c.Get("user_id")
+		tenantID, tenantExists := c.Get("tenant_id")
+		entityCode := c.Param("entity")
+
+		// If no user or tenant, skip permission check (other middleware will handle)
+		if !userExists || !tenantExists || entityCode == "" {
+			c.Next()
+			return
+		}
+
+		// Check permission
+		hasPermission, err := h.permissionService.CheckPermission(
+			tenantID.(uuid.UUID),
+			userID.(uuid.UUID),
+			entityCode,
+			action,
+		)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check permissions"})
+			c.Abort()
+			return
+		}
+
+		if !hasPermission {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "permission denied",
+				"action":  string(action),
+				"entity":  entityCode,
+				"message": "You do not have permission to perform this action",
+			})
+			c.Abort()
+			return
+		}
+
 		c.Next()
 	}
 }
@@ -82,7 +190,7 @@ func (h *Handler) GetSchema(c *gin.Context) {
 
 	schema, err := h.schemaEngine.GetFullSchema(tenantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		h.handleError(c, err)
 		return
 	}
 
@@ -97,7 +205,11 @@ func (h *Handler) GetEntitySchema(c *gin.Context) {
 
 	schema, err := h.schemaEngine.GetEntitySchema(tenantID, entityCode)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		if strings.Contains(err.Error(), "not found") {
+			h.handleError(c, errors.NewNotFoundError("entity"))
+		} else {
+			h.handleError(c, err)
+		}
 		return
 	}
 
@@ -137,7 +249,7 @@ func (h *Handler) List(c *gin.Context) {
 
 	result, err := h.dataEngine.List(tenantID, entityCode, params)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		h.handleError(c, err)
 		return
 	}
 
@@ -151,13 +263,17 @@ func (h *Handler) Get(c *gin.Context) {
 	entityCode := c.Param("entity")
 	recordID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		h.handleError(c, errors.NewBadRequestError("invalid id"))
 		return
 	}
 
 	record, err := h.dataEngine.Get(tenantID, entityCode, recordID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		if strings.Contains(err.Error(), "not found") {
+			h.handleError(c, errors.NewNotFoundError("record"))
+		} else {
+			h.handleError(c, err)
+		}
 		return
 	}
 
@@ -172,7 +288,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 	var data map[string]interface{}
 	if err := c.ShouldBindJSON(&data); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		h.handleError(c, errors.NewBadRequestError("invalid request body"))
 		return
 	}
 
@@ -185,7 +301,11 @@ func (h *Handler) Create(c *gin.Context) {
 
 	record, err := h.dataEngine.Create(tenantID, entityCode, data, userID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		if strings.Contains(err.Error(), "validation") || strings.Contains(err.Error(), "required") {
+			h.handleError(c, errors.NewValidationError("", err.Error()))
+		} else {
+			h.handleError(c, err)
+		}
 		return
 	}
 
@@ -199,13 +319,13 @@ func (h *Handler) Update(c *gin.Context) {
 	entityCode := c.Param("entity")
 	recordID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		h.handleError(c, errors.NewBadRequestError("invalid id"))
 		return
 	}
 
 	var data map[string]interface{}
 	if err := c.ShouldBindJSON(&data); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		h.handleError(c, errors.NewBadRequestError("invalid request body"))
 		return
 	}
 
@@ -218,7 +338,13 @@ func (h *Handler) Update(c *gin.Context) {
 
 	record, err := h.dataEngine.Update(tenantID, entityCode, recordID, data, userID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		if strings.Contains(err.Error(), "not found") {
+			h.handleError(c, errors.NewNotFoundError("record"))
+		} else if strings.Contains(err.Error(), "validation") {
+			h.handleError(c, errors.NewValidationError("", err.Error()))
+		} else {
+			h.handleError(c, err)
+		}
 		return
 	}
 
@@ -232,7 +358,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	entityCode := c.Param("entity")
 	recordID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		h.handleError(c, errors.NewBadRequestError("invalid id"))
 		return
 	}
 
@@ -244,7 +370,11 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 
 	if err := h.dataEngine.Delete(tenantID, entityCode, recordID, userID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		if strings.Contains(err.Error(), "not found") {
+			h.handleError(c, errors.NewNotFoundError("record"))
+		} else {
+			h.handleError(c, err)
+		}
 		return
 	}
 
@@ -261,7 +391,7 @@ func (h *Handler) BulkDelete(c *gin.Context) {
 		IDs []string `json:"ids"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		h.handleError(c, errors.NewBadRequestError("invalid request body"))
 		return
 	}
 
@@ -269,7 +399,7 @@ func (h *Handler) BulkDelete(c *gin.Context) {
 	for _, idStr := range request.IDs {
 		id, err := uuid.Parse(idStr)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id: " + idStr})
+			h.handleError(c, errors.NewBadRequestError("invalid id: "+idStr))
 			return
 		}
 		recordIDs = append(recordIDs, id)
@@ -283,7 +413,7 @@ func (h *Handler) BulkDelete(c *gin.Context) {
 	}
 
 	if err := h.dataEngine.BulkDelete(tenantID, entityCode, recordIDs, userID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.handleError(c, err)
 		return
 	}
 
@@ -317,4 +447,10 @@ func parseIntParam(value string, defaultValue int) int {
 		return defaultValue
 	}
 	return i
+}
+
+// handleError handles errors and sends appropriate HTTP responses
+func (h *Handler) handleError(c *gin.Context, err error) {
+	status, response := errors.ToHTTPError(err)
+	c.JSON(status, response)
 }
