@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/aethra/genesis/internal/api"
+	"github.com/aethra/genesis/internal/auth"
 	"github.com/aethra/genesis/internal/engine"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -56,12 +57,18 @@ func main() {
 
 	log.Println("✓ Engines initialized")
 
+	// Setup permission service
+	permissionService := auth.NewPermissionService(db)
+	log.Println("✓ Permission service initialized")
+
 	// Setup API handlers
-	handler := api.NewHandler(schemaEngine, dataEngine)
+	handler := api.NewHandlerWithPermissions(schemaEngine, dataEngine, permissionService)
 	adminHandler := api.NewAdminHandler(db)
-	router := api.SetupRouter(handler, adminHandler)
+	authHandler := api.NewAuthHandler(db)
+	router := api.SetupRouter(handler, adminHandler, authHandler)
 
 	log.Println("✓ API routes configured")
+	log.Println("  - Auth API: /auth/*")
 	log.Println("  - Admin API: /admin/*")
 	log.Println("  - Tenant API: /api/*")
 

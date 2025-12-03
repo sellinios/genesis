@@ -6,12 +6,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aethra/genesis/internal/auth"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 // SetupRouter creates and configures the Gin router
-func SetupRouter(handler *Handler, adminHandler *AdminHandler) *gin.Engine {
+func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *AuthHandler) *gin.Engine {
 	r := gin.Default()
 
 	// CORS configuration - properly configured for security
@@ -42,6 +43,25 @@ func SetupRouter(handler *Handler, adminHandler *AdminHandler) *gin.Engine {
 
 	// Health check (no auth required)
 	r.GET("/api/health", handler.Health)
+
+	// ==========================================================================
+	// AUTH API - Authentication endpoints (no auth required)
+	// ==========================================================================
+	auth := r.Group("/auth")
+	{
+		auth.POST("/login", authHandler.Login)
+		auth.POST("/register", authHandler.Register)
+		auth.POST("/refresh", authHandler.RefreshToken)
+	}
+
+	// Authenticated auth endpoints
+	authProtected := r.Group("/auth")
+	authProtected.Use(handler.UserMiddleware())
+	authProtected.Use(handler.RequireAuthMiddleware())
+	{
+		authProtected.GET("/me", authHandler.GetMe)
+		authProtected.POST("/change-password", authHandler.ChangePassword)
+	}
 
 	// ==========================================================================
 	// ADMIN API - For managing Genesis configuration
@@ -98,15 +118,23 @@ func SetupRouter(handler *Handler, adminHandler *AdminHandler) *gin.Engine {
 		api.GET("/schema", handler.GetSchema)
 		api.GET("/schema/:entity", handler.GetEntitySchema)
 
-		// Dynamic data endpoints
+		// Dynamic data endpoints with permission checking
+		// Read operations
 		data := api.Group("/data")
 		{
-			data.GET("/:entity", handler.List)
-			data.GET("/:entity/:id", handler.Get)
-			data.POST("/:entity", handler.Create)
-			data.PUT("/:entity/:id", handler.Update)
-			data.DELETE("/:entity/:id", handler.Delete)
-			data.POST("/:entity/bulk-delete", handler.BulkDelete)
+			// View permission required for listing and getting
+			data.GET("/:entity", handler.PermissionMiddleware(auth.ActionView), handler.List)
+			data.GET("/:entity/:id", handler.PermissionMiddleware(auth.ActionView), handler.Get)
+
+			// Create permission required
+			data.POST("/:entity", handler.PermissionMiddleware(auth.ActionCreate), handler.Create)
+
+			// Edit permission required
+			data.PUT("/:entity/:id", handler.PermissionMiddleware(auth.ActionEdit), handler.Update)
+
+			// Delete permission required
+			data.DELETE("/:entity/:id", handler.PermissionMiddleware(auth.ActionDelete), handler.Delete)
+			data.POST("/:entity/bulk-delete", handler.PermissionMiddleware(auth.ActionDelete), handler.BulkDelete)
 		}
 	}
 
