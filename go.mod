@@ -1,8 +1,6 @@
 module github.com/aethra/genesis
 
-go 1.23.0
-
-toolchain go1.24.7
+go 1.25
 
 require (
 	github.com/gin-contrib/cors v1.7.6
