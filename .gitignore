@@ -37,3 +37,15 @@ Thumbs.db
 # Build output
 /dist/
 /build/
+
+# Docker
+.docker/
+
+# Production secrets
+.env.production
+*.pem
+*.key
+
+# Temporary files
+tmp/
+.air.toml

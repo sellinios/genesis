@@ -8,14 +8,18 @@ import (
 
 	"github.com/aethra/genesis/internal/api"
 	"github.com/aethra/genesis/internal/auth"
+	"github.com/aethra/genesis/internal/database"
 	"github.com/aethra/genesis/internal/engine"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
+// Version is set at build time
+var Version = "dev"
+
 func main() {
-	fmt.Println(`
+	fmt.Printf(`
    ██████╗ ███████╗███╗   ██╗███████╗███████╗██╗███████╗
   ██╔════╝ ██╔════╝████╗  ██║██╔════╝██╔════╝██║██╔════╝
   ██║  ███╗█████╗  ██╔██╗ ██║█████╗  ███████╗██║███████╗
@@ -24,7 +28,8 @@ func main() {
    ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚══════╝╚══════╝╚═╝╚══════╝
 
   Everything is Data. Data Defines Everything.
-  `)
+  Version: %s
+`, Version)
 
 	// Get configuration from environment
 	dbHost := getEnv("DB_HOST", "localhost")
@@ -47,9 +52,12 @@ func main() {
 
 	log.Println("✓ Connected to database")
 
-	// Note: Tables are created via SQL migrations in /migrations folder
-	// Run: psql -d genesis -f migrations/001_genesis_core.sql
-	log.Println("✓ Database ready (using SQL migrations)")
+	// Run embedded migrations
+	log.Println("→ Running database migrations...")
+	if err := database.RunMigrations(db); err != nil {
+		log.Fatalf("Failed to run migrations: %v", err)
+	}
+	log.Println("✓ Database migrations complete")
 
 	// Initialize engines
 	schemaEngine := engine.NewSchemaEngine(db)
