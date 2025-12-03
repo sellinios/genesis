@@ -130,6 +130,45 @@ func (h *Handler) RequireAuthMiddleware() gin.HandlerFunc {
 	}
 }
 
+// RequireAdminMiddleware requires user to have admin or super_admin role
+func (h *Handler) RequireAdminMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		roles, exists := c.Get("user_roles")
+		if !exists {
+			c.JSON(http.StatusForbidden, gin.H{"error": "admin access required"})
+			c.Abort()
+			return
+		}
+
+		roleList, ok := roles.([]string)
+		if !ok {
+			c.JSON(http.StatusForbidden, gin.H{"error": "admin access required"})
+			c.Abort()
+			return
+		}
+
+		// Check for admin or super_admin role
+		isAdmin := false
+		for _, role := range roleList {
+			if role == "admin" || role == "super_admin" {
+				isAdmin = true
+				break
+			}
+		}
+
+		if !isAdmin {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "admin access required",
+				"message": "You must have admin or super_admin role to access this resource",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
 // PermissionMiddleware checks if user has permission for the requested action
 func (h *Handler) PermissionMiddleware(action auth.Action) gin.HandlerFunc {
 	return func(c *gin.Context) {

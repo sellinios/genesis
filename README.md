@@ -4,46 +4,64 @@ Dynamic Business Platform - Everything is Data, Data Defines Everything.
 
 ## Quick Start
 
-```bash
-# Clone and run
-git clone https://github.com/sellinios/genesis.git
-cd genesis
-docker-compose up -d
-```
+1. **Copy environment template:**
+   ```bash
+   cp .env.example .env
+   ```
 
-Server starts at `http://localhost:8090`
+2. **Configure your settings in `.env`**
+
+3. **Run:**
+   ```bash
+   docker-compose up -d
+   ```
 
 ## Configuration
 
-Environment variables (set in docker-compose.yml or pass directly):
+All settings are configured via environment variables. Copy `.env.example` to `.env` and adjust values for your environment.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DB_HOST` | postgres | Database host |
-| `DB_PORT` | 5432 | Database port |
-| `DB_USER` | genesis | Database user |
-| `DB_PASSWORD` | genesis_secret_change_me | Database password |
-| `DB_NAME` | genesis | Database name |
-| `PORT` | 8090 | Server port |
-| `JWT_SECRET` | (auto-generated) | JWT signing key |
-| `CORS_ALLOWED_ORIGINS` | localhost:3000,localhost:8080 | Allowed CORS origins |
+### Required Variables
+
+| Variable | Description |
+|----------|-------------|
+| `DB_HOST` | Database hostname |
+| `DB_PORT` | Database port |
+| `DB_USER` | Database username |
+| `DB_PASSWORD` | Database password |
+| `DB_NAME` | Database name |
+| `JWT_SECRET` | Secret key for JWT signing (min 32 chars) |
+
+### Optional Variables
+
+| Variable | Description |
+|----------|-------------|
+| `PORT` | Server port (default: 8090) |
+| `GIN_MODE` | Gin mode: debug/release |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins |
 
 ## API Endpoints
 
-- **Auth**: `/auth/login`, `/auth/register`, `/auth/refresh`
-- **Admin**: `/admin/tenants`, `/admin/modules`, `/admin/entities`
+- **Auth**: `/auth/login`, `/auth/register`, `/auth/refresh`, `/auth/logout`
+- **Admin**: `/admin/tenants`, `/admin/modules`, `/admin/entities` (requires admin role)
 - **Data**: `/api/data/:entity`
 - **Health**: `/api/health`
 
 ## Build
 
 ```bash
-# Build Docker image
+# Docker
 docker build -t genesis .
 
-# Build binary
+# Binary
 go build -o genesis ./cmd/server
 ```
+
+## Security Notes
+
+- Change all default passwords before deploying
+- Use strong JWT_SECRET (min 32 characters)
+- Configure CORS_ALLOWED_ORIGINS for production
+- Admin API requires authentication with admin role
 
 ## License
 
