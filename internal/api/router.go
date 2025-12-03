@@ -61,14 +61,18 @@ func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *Auth
 	{
 		authProtected.GET("/me", authHandler.GetMe)
 		authProtected.POST("/change-password", authHandler.ChangePassword)
+		authProtected.POST("/logout", authHandler.Logout)
 	}
 
 	// ==========================================================================
 	// ADMIN API - For managing Genesis configuration
 	// These endpoints are used to configure tenants, modules, entities, fields
-	// No tenant context required - these are super-admin operations
+	// Requires authentication with admin or super_admin role
 	// ==========================================================================
 	admin := r.Group("/admin")
+	admin.Use(handler.UserMiddleware())
+	admin.Use(handler.RequireAuthMiddleware())
+	admin.Use(handler.RequireAdminMiddleware())
 	{
 		// Tenant management
 		admin.GET("/tenants", adminHandler.ListTenants)

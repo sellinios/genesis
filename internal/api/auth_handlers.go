@@ -3,6 +3,8 @@ package api
 
 import (
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/aethra/genesis/internal/auth"
 	"github.com/aethra/genesis/internal/errors"
@@ -11,17 +13,113 @@ import (
 	"gorm.io/gorm"
 )
 
+// LoginRateLimiter implements rate limiting for login attempts
+type LoginRateLimiter struct {
+	attempts map[string]*loginAttempt
+	mu       sync.RWMutex
+}
+
+type loginAttempt struct {
+	count     int
+	firstTry  time.Time
+	blockedAt *time.Time
+}
+
+// NewLoginRateLimiter creates a new rate limiter
+func NewLoginRateLimiter() *LoginRateLimiter {
+	rl := &LoginRateLimiter{
+		attempts: make(map[string]*loginAttempt),
+	}
+	// Start cleanup goroutine
+	go rl.cleanup()
+	return rl
+}
+
+// Allow checks if a login attempt is allowed
+func (rl *LoginRateLimiter) Allow(key string) (bool, int, time.Duration) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	attempt, exists := rl.attempts[key]
+
+	if !exists {
+		rl.attempts[key] = &loginAttempt{count: 1, firstTry: now}
+		return true, 4, 0 // 5 attempts allowed, 4 remaining
+	}
+
+	// If blocked, check if block has expired (15 minutes)
+	if attempt.blockedAt != nil {
+		blockDuration := 15 * time.Minute
+		if now.Sub(*attempt.blockedAt) < blockDuration {
+			remaining := blockDuration - now.Sub(*attempt.blockedAt)
+			return false, 0, remaining
+		}
+		// Block expired, reset
+		attempt.count = 1
+		attempt.firstTry = now
+		attempt.blockedAt = nil
+		return true, 4, 0
+	}
+
+	// Reset if window (5 minutes) has passed
+	if now.Sub(attempt.firstTry) > 5*time.Minute {
+		attempt.count = 1
+		attempt.firstTry = now
+		return true, 4, 0
+	}
+
+	// Increment and check
+	attempt.count++
+	if attempt.count > 5 {
+		attempt.blockedAt = &now
+		return false, 0, 15 * time.Minute
+	}
+
+	return true, 5 - attempt.count, 0
+}
+
+// RecordFailure records a failed login attempt
+func (rl *LoginRateLimiter) RecordFailure(key string) {
+	// Already counted in Allow(), this is for tracking
+}
+
+// Reset resets the attempts for a key (on successful login)
+func (rl *LoginRateLimiter) Reset(key string) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	delete(rl.attempts, key)
+}
+
+// cleanup removes old entries periodically
+func (rl *LoginRateLimiter) cleanup() {
+	ticker := time.NewTicker(10 * time.Minute)
+	for range ticker.C {
+		rl.mu.Lock()
+		now := time.Now()
+		for key, attempt := range rl.attempts {
+			// Remove entries older than 30 minutes
+			if now.Sub(attempt.firstTry) > 30*time.Minute {
+				delete(rl.attempts, key)
+			}
+		}
+		rl.mu.Unlock()
+	}
+}
+
 // AuthHandler handles authentication endpoints
 type AuthHandler struct {
-	db         *gorm.DB
-	jwtService *auth.JWTService
+	db          *gorm.DB
+	jwtService  *auth.JWTService
+	rateLimiter *LoginRateLimiter
 }
 
 // NewAuthHandler creates a new auth handler
 func NewAuthHandler(db *gorm.DB) *AuthHandler {
 	return &AuthHandler{
-		db:         db,
-		jwtService: auth.NewJWTService(),
+		db:          db,
+		jwtService:  auth.NewJWTService(),
+		rateLimiter: NewLoginRateLimiter(),
 	}
 }
 
@@ -66,6 +164,22 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// Rate limiting key: IP + email combination
+	clientIP := c.ClientIP()
+	rateLimitKey := clientIP + ":" + req.Email
+
+	// Check rate limit
+	allowed, remaining, retryAfter := h.rateLimiter.Allow(rateLimitKey)
+	if !allowed {
+		c.Header("Retry-After", retryAfter.String())
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"error":       "too many login attempts",
+			"retry_after": retryAfter.Seconds(),
+			"message":     "Please wait before trying again",
+		})
+		return
+	}
+
 	tenantID, err := uuid.Parse(req.TenantID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
@@ -90,6 +204,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
+			c.Header("X-RateLimit-Remaining", string(rune(remaining)))
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		} else {
 			status, response := errors.ToHTTPError(errors.NewInternalError(err))
@@ -105,9 +220,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// Verify password
 	if !auth.CheckPassword(req.Password, user.PasswordHash) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":               "invalid credentials",
+			"attempts_remaining":  remaining,
+		})
 		return
 	}
+
+	// Successful login - reset rate limiter
+	h.rateLimiter.Reset(rateLimitKey)
 
 	// Get user roles
 	var roles []string
@@ -400,4 +521,29 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "password changed successfully"})
+}
+
+// Logout invalidates the current session
+// POST /auth/logout
+// Note: For stateless JWT, we return success and let the client discard the token
+// For production, consider implementing a token blacklist in Redis
+func (h *AuthHandler) Logout(c *gin.Context) {
+	// Get user info for audit logging
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+		return
+	}
+
+	// Update last activity (optional audit)
+	h.db.Table("users").Where("id = ?", userID).Update("updated_at", gorm.Expr("CURRENT_TIMESTAMP"))
+
+	// In a production system, you would:
+	// 1. Add the token to a blacklist (Redis with TTL matching token expiry)
+	// 2. Or use short-lived access tokens with refresh token rotation
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "logged out successfully",
+		"note":    "please discard your tokens client-side",
+	})
 }

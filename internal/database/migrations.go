@@ -81,10 +81,3 @@ func RunMigrations(db *gorm.DB) error {
 
 	return nil
 }
-
-// RunMigrationsFromPath runs migrations from a filesystem path (for development)
-func RunMigrationsFromPath(db *gorm.DB, path string) error {
-	// This is used when migrations are not embedded (development mode)
-	// For now, just return nil as we use embedded migrations
-	return nil
-}

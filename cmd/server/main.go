@@ -32,10 +32,11 @@ func main() {
 `, Version)
 
 	// Get configuration from environment
+	// Defaults match docker-compose.yml for consistency
 	dbHost := getEnv("DB_HOST", "localhost")
-	dbPort := getEnv("DB_PORT", "5433")
-	dbUser := getEnv("DB_USER", "genesis_user")
-	dbPassword := getEnv("DB_PASSWORD", "genesis_pass")
+	dbPort := getEnv("DB_PORT", "5432")
+	dbUser := getEnv("DB_USER", "genesis")
+	dbPassword := getEnv("DB_PASSWORD", "genesis_secret_change_me")
 	dbName := getEnv("DB_NAME", "genesis")
 	serverPort := getEnv("PORT", "8090")
 
