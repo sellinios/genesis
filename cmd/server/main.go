@@ -49,7 +49,8 @@ func startServer() {
 	handler := api.NewHandlerWithPermissions(schemaEngine, dataEngine, permissionService)
 	adminHandler := api.NewAdminHandler(db)
 	authHandler := api.NewAuthHandler(db)
-	router := api.SetupRouter(handler, adminHandler, authHandler)
+	setupHandler := api.NewSetupHandler(db)
+	router := api.SetupRouter(handler, adminHandler, authHandler, setupHandler)
 
 	port := getEnv("PORT", "8090")
 	log.Printf("Server starting on port %s", port)

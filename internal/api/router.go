@@ -12,8 +12,13 @@ import (
 )
 
 // SetupRouter creates and configures the Gin router
-func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *AuthHandler) *gin.Engine {
+func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *AuthHandler, setupHandler *SetupHandler) *gin.Engine {
 	r := gin.Default()
+
+	// Setup wizard (only shows if no tenants exist)
+	r.GET("/", setupHandler.SetupPage)
+	r.GET("/setup", setupHandler.SetupPage)
+	r.POST("/setup", setupHandler.DoSetup)
 
 	// CORS configuration - properly configured for security
 	// When credentials are used, specific origins must be provided (not *)
