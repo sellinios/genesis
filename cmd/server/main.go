@@ -32,12 +32,14 @@ func main() {
 `, Version)
 
 	// Get configuration from environment
-	// Defaults match docker-compose.yml for consistency
-	dbHost := getEnv("DB_HOST", "localhost")
-	dbPort := getEnv("DB_PORT", "5432")
-	dbUser := getEnv("DB_USER", "genesis")
-	dbPassword := getEnv("DB_PASSWORD", "genesis_secret_change_me")
-	dbName := getEnv("DB_NAME", "genesis")
+	// Required variables - will fail if not set
+	dbHost := requireEnv("DB_HOST")
+	dbPort := requireEnv("DB_PORT")
+	dbUser := requireEnv("DB_USER")
+	dbPassword := requireEnv("DB_PASSWORD")
+	dbName := requireEnv("DB_NAME")
+
+	// Optional variables with defaults
 	serverPort := getEnv("PORT", "8090")
 
 	// Connect to database
@@ -78,7 +80,7 @@ func main() {
 
 	log.Println("✓ API routes configured")
 	log.Println("  - Auth API: /auth/*")
-	log.Println("  - Admin API: /admin/*")
+	log.Println("  - Admin API: /admin/* (requires admin role)")
 	log.Println("  - Tenant API: /api/*")
 
 	// Start server
@@ -88,6 +90,16 @@ func main() {
 	}
 }
 
+// requireEnv gets an environment variable or exits with error
+func requireEnv(key string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		log.Fatalf("Required environment variable %s is not set", key)
+	}
+	return value
+}
+
+// getEnv gets an environment variable with a default fallback
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
