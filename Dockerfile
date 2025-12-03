@@ -6,7 +6,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Build
 # -----------------------------------------------------------------------------
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
@@ -41,9 +41,6 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /build/genesis .
-
-# Copy migrations
-COPY --from=builder /build/migrations ./migrations
 
 # Set ownership
 RUN chown -R genesis:genesis /app

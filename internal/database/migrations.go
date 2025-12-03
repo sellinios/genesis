@@ -8,6 +8,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -17,9 +18,9 @@ var migrationsFS embed.FS
 
 // MigrationRecord tracks which migrations have been applied
 type MigrationRecord struct {
-	ID        uint   `gorm:"primaryKey"`
-	Name      string `gorm:"uniqueIndex;size:255"`
-	AppliedAt string `gorm:"autoCreateTime"`
+	ID        uint      `gorm:"primaryKey"`
+	Name      string    `gorm:"uniqueIndex;size:255"`
+	AppliedAt time.Time `gorm:"autoCreateTime"`
 }
 
 // TableName returns the table name for migrations

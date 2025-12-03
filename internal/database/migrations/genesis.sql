@@ -594,12 +594,12 @@ INSERT INTO field_types (code, name, category, db_type, db_default_length, defau
 
 -- Relation Types
 ('belongs_to', 'Belongs To', 'relation', 'UUID', NULL, 'RelationSelect', '{}'),
-('has_many', 'Has Many', 'relation', NULL, NULL, 'RelationList', '{}'),
-('many_to_many', 'Many to Many', 'relation', NULL, NULL, 'RelationMultiSelect', '{}'),
+('has_many', 'Has Many', 'relation', 'VIRTUAL', NULL, 'RelationList', '{}'),
+('many_to_many', 'Many to Many', 'relation', 'VIRTUAL', NULL, 'RelationMultiSelect', '{}'),
 
 -- Computed Types
-('formula', 'Formula', 'computed', NULL, NULL, 'FormulaDisplay', '{}'),
-('aggregation', 'Aggregation', 'computed', NULL, NULL, 'AggregationDisplay', '{}');
+('formula', 'Formula', 'computed', 'VIRTUAL', NULL, 'FormulaDisplay', '{}'),
+('aggregation', 'Aggregation', 'computed', 'VIRTUAL', NULL, 'AggregationDisplay', '{}');
 
 -- ============================================================================
 -- FUNCTIONS & TRIGGERS

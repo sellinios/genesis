@@ -81,27 +81,27 @@ func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *Auth
 		admin.PUT("/tenants/:id", adminHandler.UpdateTenant)
 		admin.DELETE("/tenants/:id", adminHandler.DeleteTenant)
 
-		// User management (under tenant)
-		admin.GET("/tenants/:tenant_id/users", adminHandler.ListUsers)
-		admin.POST("/tenants/:tenant_id/users", adminHandler.CreateUser)
+		// User management
+		admin.GET("/users", adminHandler.ListUsers)
+		admin.POST("/users", adminHandler.CreateUser)
 
-		// Module management (under tenant)
-		admin.GET("/tenants/:tenant_id/modules", adminHandler.ListModules)
-		admin.POST("/tenants/:tenant_id/modules", adminHandler.CreateModule)
+		// Module management
+		admin.GET("/modules", adminHandler.ListModules)
+		admin.POST("/modules", adminHandler.CreateModule)
 		admin.GET("/modules/:id", adminHandler.GetModule)
 		admin.PUT("/modules/:id", adminHandler.UpdateModule)
 		admin.DELETE("/modules/:id", adminHandler.DeleteModule)
 
-		// Entity management (under module)
-		admin.GET("/modules/:module_id/entities", adminHandler.ListEntities)
-		admin.POST("/modules/:module_id/entities", adminHandler.CreateEntity)
+		// Entity management
+		admin.GET("/entities", adminHandler.ListEntities)
+		admin.POST("/entities", adminHandler.CreateEntity)
 		admin.GET("/entities/:id", adminHandler.GetEntity)
 		admin.PUT("/entities/:id", adminHandler.UpdateEntity)
 		admin.DELETE("/entities/:id", adminHandler.DeleteEntity)
 
-		// Field management (under entity)
-		admin.GET("/entities/:entity_id/fields", adminHandler.ListFields)
-		admin.POST("/entities/:entity_id/fields", adminHandler.CreateField)
+		// Field management
+		admin.GET("/fields", adminHandler.ListFields)
+		admin.POST("/fields", adminHandler.CreateField)
 		admin.GET("/fields/:id", adminHandler.GetField)
 		admin.PUT("/fields/:id", adminHandler.UpdateField)
 		admin.DELETE("/fields/:id", adminHandler.DeleteField)

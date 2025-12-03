@@ -158,17 +158,22 @@ func (h *AdminHandler) DeleteTenant(c *gin.Context) {
 // MODULE MANAGEMENT
 // =============================================================================
 
-// ListModules returns all modules for a tenant
-// GET /admin/tenants/:tenant_id/modules
+// ListModules returns all modules (optionally filtered by tenant_id query param)
+// GET /admin/modules?tenant_id=xxx
 func (h *AdminHandler) ListModules(c *gin.Context) {
-	tenantID, err := uuid.Parse(c.Param("tenant_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
+	var modules []models.Module
+	query := h.db.Order("display_order")
+
+	if tenantIDStr := c.Query("tenant_id"); tenantIDStr != "" {
+		tenantID, err := uuid.Parse(tenantIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+			return
+		}
+		query = query.Where("tenant_id = ?", tenantID)
 	}
 
-	var modules []models.Module
-	if err := h.db.Where("tenant_id = ?", tenantID).Order("display_order").Find(&modules).Error; err != nil {
+	if err := query.Find(&modules).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -193,15 +198,10 @@ func (h *AdminHandler) GetModule(c *gin.Context) {
 }
 
 // CreateModule creates a new module
-// POST /admin/tenants/:tenant_id/modules
+// POST /admin/modules
 func (h *AdminHandler) CreateModule(c *gin.Context) {
-	tenantID, err := uuid.Parse(c.Param("tenant_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
-
 	var input struct {
+		TenantID     string `json:"tenant_id" binding:"required"`
 		Code         string `json:"code" binding:"required"`
 		Name         string `json:"name" binding:"required"`
 		Description  string `json:"description"`
@@ -212,6 +212,12 @@ func (h *AdminHandler) CreateModule(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	tenantID, err := uuid.Parse(input.TenantID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
 		return
 	}
 
@@ -316,17 +322,22 @@ func (h *AdminHandler) DeleteModule(c *gin.Context) {
 // ENTITY MANAGEMENT
 // =============================================================================
 
-// ListEntities returns all entities for a module
-// GET /admin/modules/:module_id/entities
+// ListEntities returns all entities (optionally filtered by module_id query param)
+// GET /admin/entities?module_id=xxx
 func (h *AdminHandler) ListEntities(c *gin.Context) {
-	moduleID, err := uuid.Parse(c.Param("module_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid module_id"})
-		return
+	var entities []models.Entity
+	query := h.db.Order("display_order")
+
+	if moduleIDStr := c.Query("module_id"); moduleIDStr != "" {
+		moduleID, err := uuid.Parse(moduleIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid module_id"})
+			return
+		}
+		query = query.Where("module_id = ?", moduleID)
 	}
 
-	var entities []models.Entity
-	if err := h.db.Where("module_id = ?", moduleID).Order("display_order").Find(&entities).Error; err != nil {
+	if err := query.Find(&entities).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -359,22 +370,10 @@ func (h *AdminHandler) GetEntity(c *gin.Context) {
 }
 
 // CreateEntity creates a new entity
-// POST /admin/modules/:module_id/entities
+// POST /admin/entities
 func (h *AdminHandler) CreateEntity(c *gin.Context) {
-	moduleID, err := uuid.Parse(c.Param("module_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid module_id"})
-		return
-	}
-
-	// Get module to find tenant_id
-	var module models.Module
-	if err := h.db.First(&module, "id = ?", moduleID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "module not found"})
-		return
-	}
-
 	var input struct {
+		ModuleID     string `json:"module_id" binding:"required"`
 		Code         string `json:"code" binding:"required"`
 		Name         string `json:"name" binding:"required"`
 		NamePlural   string `json:"name_plural"`
@@ -387,6 +386,19 @@ func (h *AdminHandler) CreateEntity(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	moduleID, err := uuid.Parse(input.ModuleID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid module_id"})
+		return
+	}
+
+	// Get module to find tenant_id
+	var module models.Module
+	if err := h.db.First(&module, "id = ?", moduleID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "module not found"})
 		return
 	}
 
@@ -515,17 +527,22 @@ func (h *AdminHandler) ListFieldTypes(c *gin.Context) {
 	c.JSON(http.StatusOK, fieldTypes)
 }
 
-// ListFields returns all fields for an entity
-// GET /admin/entities/:entity_id/fields
+// ListFields returns all fields (optionally filtered by entity_id query param)
+// GET /admin/fields?entity_id=xxx
 func (h *AdminHandler) ListFields(c *gin.Context) {
-	entityID, err := uuid.Parse(c.Param("entity_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id"})
-		return
+	var fields []models.Field
+	query := h.db.Order("display_order")
+
+	if entityIDStr := c.Query("entity_id"); entityIDStr != "" {
+		entityID, err := uuid.Parse(entityIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id"})
+			return
+		}
+		query = query.Where("entity_id = ?", entityID)
 	}
 
-	var fields []models.Field
-	if err := h.db.Where("entity_id = ?", entityID).Order("display_order").Find(&fields).Error; err != nil {
+	if err := query.Find(&fields).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -550,22 +567,10 @@ func (h *AdminHandler) GetField(c *gin.Context) {
 }
 
 // CreateField creates a new field
-// POST /admin/entities/:entity_id/fields
+// POST /admin/fields
 func (h *AdminHandler) CreateField(c *gin.Context) {
-	entityID, err := uuid.Parse(c.Param("entity_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id"})
-		return
-	}
-
-	// Get entity to find tenant_id
-	var entity models.Entity
-	if err := h.db.First(&entity, "id = ?", entityID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "entity not found"})
-		return
-	}
-
 	var input struct {
+		EntityID     string                 `json:"entity_id" binding:"required"`
 		FieldTypeID  string                 `json:"field_type_id" binding:"required"`
 		Code         string                 `json:"code" binding:"required"`
 		Name         string                 `json:"name" binding:"required"`
@@ -589,6 +594,19 @@ func (h *AdminHandler) CreateField(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	entityID, err := uuid.Parse(input.EntityID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid entity_id"})
+		return
+	}
+
+	// Get entity to find tenant_id
+	var entity models.Entity
+	if err := h.db.First(&entity, "id = ?", entityID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "entity not found"})
 		return
 	}
 
@@ -759,17 +777,22 @@ func (h *AdminHandler) DeleteField(c *gin.Context) {
 // USER MANAGEMENT
 // =============================================================================
 
-// ListUsers returns all users for a tenant
-// GET /admin/tenants/:tenant_id/users
+// ListUsers returns all users (optionally filtered by tenant_id query param)
+// GET /admin/users?tenant_id=xxx
 func (h *AdminHandler) ListUsers(c *gin.Context) {
-	tenantID, err := uuid.Parse(c.Param("tenant_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
+	var users []models.User
+	query := h.db
+
+	if tenantIDStr := c.Query("tenant_id"); tenantIDStr != "" {
+		tenantID, err := uuid.Parse(tenantIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
+			return
+		}
+		query = query.Where("tenant_id = ?", tenantID)
 	}
 
-	var users []models.User
-	if err := h.db.Where("tenant_id = ?", tenantID).Find(&users).Error; err != nil {
+	if err := query.Find(&users).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -783,15 +806,10 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 }
 
 // CreateUser creates a new user
-// POST /admin/tenants/:tenant_id/users
+// POST /admin/users
 func (h *AdminHandler) CreateUser(c *gin.Context) {
-	tenantID, err := uuid.Parse(c.Param("tenant_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
-		return
-	}
-
 	var input struct {
+		TenantID  string                 `json:"tenant_id" binding:"required"`
 		Email     string                 `json:"email" binding:"required,email"`
 		Password  string                 `json:"password" binding:"required,min=8"`
 		FirstName string                 `json:"first_name"`
@@ -801,6 +819,12 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	tenantID, err := uuid.Parse(input.TenantID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant_id"})
 		return
 	}
 
