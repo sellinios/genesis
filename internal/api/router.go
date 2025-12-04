@@ -12,7 +12,7 @@ import (
 )
 
 // SetupRouter creates and configures the Gin router
-func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *AuthHandler, setupHandler *SetupHandler, adminPanelHandler *AdminPanelHandler, uiHandler *UIHandler) *gin.Engine {
+func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *AuthHandler, setupHandler *SetupHandler, adminPanelHandler *AdminPanelHandler, uiHandler *UIHandler, generatorHandler *GeneratorHandler) *gin.Engine {
 	r := gin.Default()
 
 	// Setup wizard (only shows if no tenants exist)
@@ -122,7 +122,15 @@ func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *Auth
 
 		// Field types (global)
 		admin.GET("/field-types", adminHandler.ListFieldTypes)
+
+		// Code generation
+		admin.POST("/generate", generatorHandler.GenerateAll)
+		admin.DELETE("/cache", generatorHandler.InvalidateCache)
 	}
+
+	// Component bundle (public, cached)
+	r.GET("/bundle.js", generatorHandler.GetBundle)
+	r.GET("/components/:code", generatorHandler.GetComponent)
 
 	// ==========================================================================
 	// TENANT API - For tenant-specific operations

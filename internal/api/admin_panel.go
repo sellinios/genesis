@@ -22,6 +22,12 @@ func NewAdminPanelHandler(db *gorm.DB) *AdminPanelHandler {
 
 // AdminPanel serves the main admin panel SPA
 func (h *AdminPanelHandler) AdminPanel(c *gin.Context) {
+	// Get base path from reverse proxy header
+	basePath := c.GetHeader("X-Forwarded-Prefix")
+	if basePath == "" {
+		basePath = ""
+	}
+
 	// Get tenant info
 	var tenant models.Tenant
 	h.db.First(&tenant)
@@ -585,6 +591,7 @@ func (h *AdminPanelHandler) AdminPanel(c *gin.Context) {
     <script>
         // State
         const TENANT_ID = '` + tenant.ID.String() + `';
+        const BASE_PATH = '` + basePath + `';
         let token = localStorage.getItem('token');
         let currentUser = JSON.parse(localStorage.getItem('user') || 'null');
         let currentPage = 'dashboard';
@@ -631,7 +638,7 @@ func (h *AdminPanelHandler) AdminPanel(c *gin.Context) {
             errorEl.style.display = 'none';
 
             try {
-                const res = await fetch('/auth/login', {
+                const res = await fetch(BASE_PATH + '/auth/login', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({email, password, tenant_id: TENANT_ID})
@@ -673,7 +680,7 @@ func (h *AdminPanelHandler) AdminPanel(c *gin.Context) {
             };
             if (body) options.body = JSON.stringify(body);
 
-            const res = await fetch(endpoint, options);
+            const res = await fetch(BASE_PATH + endpoint, options);
             const data = await res.json();
 
             if (!res.ok) {

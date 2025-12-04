@@ -27,10 +27,13 @@ func NewUIHandler(db *gorm.DB) *UIHandler {
 
 // AppPage serves the dynamic app page
 func (h *UIHandler) AppPage(c *gin.Context) {
+	// Get base path from reverse proxy header
+	basePath := c.GetHeader("X-Forwarded-Prefix")
+
 	// Check if tenant exists
 	var tenant models.Tenant
 	if err := h.db.First(&tenant).Error; err != nil {
-		c.Redirect(http.StatusFound, "/setup")
+		c.Redirect(http.StatusFound, basePath+"/setup")
 		return
 	}
 
@@ -40,8 +43,8 @@ func (h *UIHandler) AppPage(c *gin.Context) {
 	// Get the full path
 	path := c.Request.URL.Path
 
-	// Render page
-	html, err := h.renderer.RenderPage(tenant.ID, path, user)
+	// Render page with basePath
+	html, err := h.renderer.RenderPageWithBasePath(tenant.ID, path, user, basePath)
 	if err != nil {
 		// Log error and show simple error page
 		c.String(http.StatusInternalServerError, "Error: %v", err)
@@ -74,10 +77,13 @@ func (h *UIHandler) getUserFromContext(c *gin.Context) map[string]any {
 
 // LoginPage serves the login page for the app
 func (h *UIHandler) LoginPage(c *gin.Context) {
+	// Get base path from reverse proxy header
+	basePath := c.GetHeader("X-Forwarded-Prefix")
+
 	// Check if tenant exists
 	var tenant models.Tenant
 	if err := h.db.First(&tenant).Error; err != nil {
-		c.Redirect(http.StatusFound, "/setup")
+		c.Redirect(http.StatusFound, basePath+"/setup")
 		return
 	}
 
@@ -183,6 +189,7 @@ func (h *UIHandler) LoginPage(c *gin.Context) {
 
     <script>
         const TENANT_ID = '` + tenant.ID.String() + `';
+        const BASE_PATH = '` + basePath + `';
 
         async function doLogin() {
             const email = document.getElementById('email').value;
@@ -191,7 +198,7 @@ func (h *UIHandler) LoginPage(c *gin.Context) {
             errorEl.style.display = 'none';
 
             try {
-                const res = await fetch('/auth/login', {
+                const res = await fetch(BASE_PATH + '/auth/login', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({email, password, tenant_id: TENANT_ID})
@@ -205,7 +212,7 @@ func (h *UIHandler) LoginPage(c *gin.Context) {
                 localStorage.setItem('user', JSON.stringify(data.user));
                 localStorage.setItem('tenant_id', TENANT_ID);
 
-                window.location.href = '/app';
+                window.location.href = BASE_PATH + '/app';
             } catch (err) {
                 errorEl.textContent = err.message;
                 errorEl.style.display = 'block';
@@ -218,7 +225,7 @@ func (h *UIHandler) LoginPage(c *gin.Context) {
 
         // Check if already logged in
         if (localStorage.getItem('token')) {
-            window.location.href = '/app';
+            window.location.href = BASE_PATH + '/app';
         }
     </script>
 </body>

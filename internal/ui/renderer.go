@@ -40,13 +40,18 @@ type PageData struct {
 
 // RenderPage renders a complete HTML page with React components
 func (r *Renderer) RenderPage(tenantID uuid.UUID, route string, user map[string]any) (string, error) {
+	return r.RenderPageWithBasePath(tenantID, route, user, "")
+}
+
+// RenderPageWithBasePath renders a complete HTML page with React components and base path support
+func (r *Renderer) RenderPageWithBasePath(tenantID uuid.UUID, route string, user map[string]any, basePath string) (string, error) {
 	pageData, err := r.GetPageData(tenantID, route)
 	if err != nil {
 		return "", err
 	}
 	pageData.User = user
 
-	return r.GenerateHTML(pageData)
+	return r.GenerateHTMLWithBasePath(pageData, basePath)
 }
 
 // GetPageData loads all data needed for a page
@@ -199,6 +204,11 @@ func (r *Renderer) matchDynamicRoute(tenantID uuid.UUID, route string) (models.U
 
 // GenerateHTML generates the complete HTML page
 func (r *Renderer) GenerateHTML(data *PageData) (string, error) {
+	return r.GenerateHTMLWithBasePath(data, "")
+}
+
+// GenerateHTMLWithBasePath generates the complete HTML page with base path support
+func (r *Renderer) GenerateHTMLWithBasePath(data *PageData, basePath string) (string, error) {
 	// Build component code
 	componentCode := r.buildComponentCode(data.Components)
 
@@ -225,11 +235,13 @@ func (r *Renderer) GenerateHTML(data *PageData) (string, error) {
     <script type="text/babel" data-presets="react">
         // Page data from server
         const PAGE_DATA = %s;
+        const BASE_PATH = '%s';
 
         // API helper
         const api = {
             token: localStorage.getItem('token'),
             tenantId: PAGE_DATA.tenant?.id,
+            basePath: BASE_PATH,
 
             async fetch(method, endpoint, body = null) {
                 const options = {
@@ -241,7 +253,7 @@ func (r *Renderer) GenerateHTML(data *PageData) (string, error) {
                     }
                 };
                 if (body) options.body = JSON.stringify(body);
-                const res = await fetch(endpoint, options);
+                const res = await fetch(this.basePath + endpoint, options);
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'Request failed');
                 return data;
@@ -281,7 +293,7 @@ func (r *Renderer) GenerateHTML(data *PageData) (string, error) {
                 setLoading(true);
                 try {
                     const result = await api.get('/api/data/' + entity.code);
-                    setData(result || []);
+                    setData(result.data || []);
                 } catch (err) {
                     console.error('Failed to load data:', err);
                 }
@@ -335,7 +347,7 @@ func (r *Renderer) GenerateHTML(data *PageData) (string, error) {
                             <div className="logo">Genesis</div>
                             <div className="tenant-name">{PAGE_DATA.tenant?.name}</div>
                         </div>
-                        <Navigation modules={modules} entities={entities} currentPath={window.location.pathname} />
+                        <Navigation modules={modules} entities={entities} currentPath={window.location.pathname} basePath={BASE_PATH} />
                         <div className="sidebar-footer">
                             <div className="user-info">
                                 <div className="user-avatar">{(PAGE_DATA.user?.first_name || 'U')[0]}</div>
@@ -400,6 +412,7 @@ func (r *Renderer) GenerateHTML(data *PageData) (string, error) {
 		template.HTMLEscapeString(data.Page.Title),
 		css,
 		string(jsonData),
+		basePath,
 		componentCode,
 	)
 

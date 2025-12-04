@@ -24,13 +24,16 @@ func NewSetupHandler(db *gorm.DB) *SetupHandler {
 
 // SetupPage serves the setup wizard HTML
 func (h *SetupHandler) SetupPage(c *gin.Context) {
+	// Get base path from reverse proxy header
+	basePath := c.GetHeader("X-Forwarded-Prefix")
+
 	// Check if already setup (any tenant exists)
 	var count int64
 	h.db.Model(&models.Tenant{}).Count(&count)
 
 	if count > 0 {
 		// Redirect to admin panel if setup is complete
-		c.Redirect(http.StatusFound, "/panel")
+		c.Redirect(http.StatusFound, basePath+"/panel")
 		return
 	}
 
@@ -262,6 +265,7 @@ func (h *SetupHandler) SetupPage(c *gin.Context) {
     </div>
 
     <script>
+        const BASE_PATH = '` + basePath + `';
         let currentStep = 1;
         let data = {};
 
@@ -328,7 +332,7 @@ func (h *SetupHandler) SetupPage(c *gin.Context) {
             btn.innerHTML = '<span class="loader"></span> Setting up...';
 
             try {
-                const response = await fetch('/setup', {
+                const response = await fetch(BASE_PATH + '/setup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
@@ -352,7 +356,7 @@ func (h *SetupHandler) SetupPage(c *gin.Context) {
                     seconds--;
                     if (seconds <= 0) {
                         clearInterval(interval);
-                        window.location.href = '/panel';
+                        window.location.href = BASE_PATH + '/panel';
                     } else {
                         countdownEl.textContent = 'Redirecting in ' + seconds + ' seconds...';
                     }
@@ -469,6 +473,9 @@ func (h *SetupHandler) IsSetupRequired() bool {
 
 // DashboardPage serves the main dashboard after setup
 func (h *SetupHandler) DashboardPage(c *gin.Context) {
+	// Get base path from reverse proxy header
+	basePath := c.GetHeader("X-Forwarded-Prefix")
+
 	// Get stats
 	var tenantCount, userCount, moduleCount, entityCount int64
 	h.db.Model(&models.Tenant{}).Count(&tenantCount)
@@ -479,6 +486,9 @@ func (h *SetupHandler) DashboardPage(c *gin.Context) {
 	// Get tenant info
 	var tenant models.Tenant
 	h.db.First(&tenant)
+
+	// Use basePath in template
+	_ = basePath
 
 	html := `<!DOCTYPE html>
 <html lang="en">
@@ -731,6 +741,7 @@ func (h *SetupHandler) DashboardPage(c *gin.Context) {
 
     <script>
         const TENANT_ID = '` + tenant.ID.String() + `';
+        const BASE_PATH = '` + basePath + `';
 
         async function doLogin() {
             const email = document.getElementById('email').value;
@@ -742,7 +753,7 @@ func (h *SetupHandler) DashboardPage(c *gin.Context) {
             tokenEl.style.display = 'none';
 
             try {
-                const res = await fetch('/auth/login', {
+                const res = await fetch(BASE_PATH + '/auth/login', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({email, password, tenant_id: TENANT_ID})

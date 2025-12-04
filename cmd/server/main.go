@@ -52,7 +52,14 @@ func startServer() {
 	setupHandler := api.NewSetupHandler(db)
 	adminPanelHandler := api.NewAdminPanelHandler(db)
 	uiHandler := api.NewUIHandler(db)
-	router := api.SetupRouter(handler, adminHandler, authHandler, setupHandler, adminPanelHandler, uiHandler)
+	generatorHandler := api.NewGeneratorHandler(db)
+
+	// Warmup: pre-compile components on startup
+	if err := generatorHandler.Warmup(); err != nil {
+		log.Printf("Warning: Component warmup failed: %v", err)
+	}
+
+	router := api.SetupRouter(handler, adminHandler, authHandler, setupHandler, adminPanelHandler, uiHandler, generatorHandler)
 
 	port := getEnv("PORT", "8090")
 	log.Printf("Server starting on port %s", port)

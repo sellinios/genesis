@@ -2,6 +2,9 @@
 package auth
 
 import (
+	"log"
+
+	"github.com/aethra/genesis/internal/models"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -89,6 +92,8 @@ func (s *PermissionService) CheckPermission(tenantID, userID uuid.UUID, entityCo
 
 // GetUserPermission returns the computed permissions for a user on an entity
 func (s *PermissionService) GetUserPermission(tenantID, userID uuid.UUID, entityCode string) (*UserPermission, error) {
+	log.Printf("GetUserPermission: tenantID=%s, userID=%s, entityCode=%s", tenantID, userID, entityCode)
+
 	// Get all user's roles
 	var roleIDs []uuid.UUID
 	err := s.db.Table("user_roles").
@@ -96,34 +101,47 @@ func (s *PermissionService) GetUserPermission(tenantID, userID uuid.UUID, entity
 		Pluck("role_id", &roleIDs).Error
 
 	if err != nil {
+		log.Printf("Error getting roles: %v", err)
 		return nil, err
 	}
 
+	log.Printf("Found %d roles: %v", len(roleIDs), roleIDs)
+
 	// If user has no roles, return no permissions
 	if len(roleIDs) == 0 {
+		log.Printf("No roles, returning empty permissions")
 		return &UserPermission{}, nil
 	}
 
 	// Get entity ID from code
-	var entityID uuid.UUID
+	var entity struct{ ID uuid.UUID }
 	err = s.db.Table("entities").
 		Select("id").
 		Where("tenant_id = ? AND code = ?", tenantID, entityCode).
-		First(&entityID).Error
+		First(&entity).Error
 
 	if err != nil {
+		log.Printf("Error getting entity: %v", err)
 		// If entity not found, deny all
 		return &UserPermission{}, nil
 	}
 
+	entityID := entity.ID
+	log.Printf("Found entity ID: %s", entityID)
+
 	// Get all permissions for user's roles on this entity
-	var permissions []Permission
-	err = s.db.Table("permissions").
-		Where("tenant_id = ? AND entity_id = ? AND role_id IN ?", tenantID, entityID, roleIDs).
+	var permissions []models.Permission
+	err = s.db.Where("tenant_id = ? AND entity_id = ? AND role_id IN ?", tenantID, entityID, roleIDs).
 		Find(&permissions).Error
 
 	if err != nil {
+		log.Printf("Error getting permissions: %v", err)
 		return nil, err
+	}
+
+	log.Printf("Found %d permissions", len(permissions))
+	for _, p := range permissions {
+		log.Printf("  Permission: can_view=%v, can_create=%v", p.CanView, p.CanCreate)
 	}
 
 	// Merge permissions (OR logic - if any role grants permission, user has it)
