@@ -151,6 +151,30 @@ func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *Auth
 
 		// Static content endpoint
 		r.GET("/api/content/:slug", contentHandler.GetContent)
+
+		// ==========================================================================
+		// ADMIN ARTICLE API - For managing Aethra articles from Genesis
+		// Full CRUD operations on articles (requires authentication)
+		// ==========================================================================
+		adminArticles := r.Group("/api/admin")
+		adminArticles.Use(handler.UserMiddleware())
+		adminArticles.Use(handler.RequireAuthMiddleware())
+		{
+			// Article CRUD
+			adminArticles.GET("/articles", contentHandler.GetAdminArticles)
+			adminArticles.GET("/articles/:id", contentHandler.GetAdminArticle)
+			adminArticles.POST("/articles", contentHandler.CreateArticle)
+			adminArticles.PUT("/articles/:id", contentHandler.UpdateArticle)
+			adminArticles.DELETE("/articles/:id", contentHandler.DeleteArticle)
+
+			// Article actions
+			adminArticles.POST("/articles/:id/publish", contentHandler.PublishArticle)
+			adminArticles.POST("/articles/:id/unpublish", contentHandler.UnpublishArticle)
+
+			// Lookup data
+			adminArticles.GET("/websites", contentHandler.GetWebsites)
+			adminArticles.GET("/categories", contentHandler.GetCategoriesList)
+		}
 	}
 
 	// ==========================================================================

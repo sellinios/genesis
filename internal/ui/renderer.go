@@ -151,6 +151,37 @@ func (r *Renderer) GetPageData(tenantID uuid.UUID, route string) (*PageData, err
 func (r *Renderer) matchDynamicRoute(tenantID uuid.UUID, route string) (models.UIPage, error) {
 	parts := strings.Split(strings.Trim(route, "/"), "/")
 
+	// Match /app/articles - Special Aethra articles management
+	if len(parts) >= 2 && parts[0] == "app" && parts[1] == "articles" {
+		if len(parts) >= 3 {
+			if parts[2] == "new" {
+				return models.UIPage{
+					Code:     "articles_form",
+					Name:     "Create Article",
+					Route:    route,
+					PageType: "articles_form",
+					Title:    "Create Article",
+				}, nil
+			}
+			// Edit view (article ID)
+			return models.UIPage{
+				Code:     "articles_edit",
+				Name:     "Edit Article",
+				Route:    route,
+				PageType: "articles_edit",
+				Title:    "Edit Article",
+			}, nil
+		}
+		// List view
+		return models.UIPage{
+			Code:     "articles_list",
+			Name:     "Articles",
+			Route:    route,
+			PageType: "articles_list",
+			Title:    "Articles",
+		}, nil
+	}
+
 	// Match /app/:module/:entity
 	if len(parts) >= 3 && parts[0] == "app" {
 		moduleCode := parts[1]
@@ -268,6 +299,250 @@ func (r *Renderer) GenerateHTMLWithBasePath(data *PageData, basePath string) (st
         // Components from database
         %s
 
+        // Articles Management Component
+        function ArticlesManager() {
+            const [articles, setArticles] = React.useState([]);
+            const [loading, setLoading] = React.useState(true);
+            const [websites, setWebsites] = React.useState([]);
+            const [categories, setCategories] = React.useState([]);
+            const [filters, setFilters] = React.useState({ status: '', website_id: '', search: '' });
+            const [modalOpen, setModalOpen] = React.useState(false);
+            const [editingArticle, setEditingArticle] = React.useState(null);
+            const [formValues, setFormValues] = React.useState({});
+            const [total, setTotal] = React.useState(0);
+
+            React.useEffect(() => {
+                loadArticles();
+                loadWebsites();
+                loadCategories();
+            }, [filters]);
+
+            const loadArticles = async () => {
+                setLoading(true);
+                try {
+                    const params = new URLSearchParams();
+                    if (filters.status) params.append('status', filters.status);
+                    if (filters.website_id) params.append('website_id', filters.website_id);
+                    if (filters.search) params.append('search', filters.search);
+                    const result = await api.get('/api/admin/articles?' + params.toString());
+                    setArticles(result.articles || []);
+                    setTotal(result.total || 0);
+                } catch (err) {
+                    console.error('Failed to load articles:', err);
+                }
+                setLoading(false);
+            };
+
+            const loadWebsites = async () => {
+                try {
+                    const result = await api.get('/api/admin/websites');
+                    setWebsites(result.websites || []);
+                } catch (err) { console.error(err); }
+            };
+
+            const loadCategories = async () => {
+                try {
+                    const result = await api.get('/api/admin/categories');
+                    setCategories(result.categories || []);
+                } catch (err) { console.error(err); }
+            };
+
+            const handleCreate = () => {
+                setEditingArticle(null);
+                setFormValues({ status: 'draft', website_id: 4 });
+                setModalOpen(true);
+            };
+
+            const handleEdit = async (article) => {
+                try {
+                    const result = await api.get('/api/admin/articles/' + article.id);
+                    setEditingArticle(result);
+                    setFormValues(result);
+                    setModalOpen(true);
+                } catch (err) { alert(err.message); }
+            };
+
+            const handleDelete = async (article) => {
+                if (!confirm('Delete article "' + article.title + '"?')) return;
+                try {
+                    await api.delete('/api/admin/articles/' + article.id);
+                    loadArticles();
+                } catch (err) { alert(err.message); }
+            };
+
+            const handlePublish = async (article) => {
+                try {
+                    await api.post('/api/admin/articles/' + article.id + '/publish');
+                    loadArticles();
+                } catch (err) { alert(err.message); }
+            };
+
+            const handleUnpublish = async (article) => {
+                try {
+                    await api.post('/api/admin/articles/' + article.id + '/unpublish');
+                    loadArticles();
+                } catch (err) { alert(err.message); }
+            };
+
+            const handleSubmit = async () => {
+                setLoading(true);
+                try {
+                    if (editingArticle) {
+                        await api.put('/api/admin/articles/' + editingArticle.id, formValues);
+                    } else {
+                        await api.post('/api/admin/articles', formValues);
+                    }
+                    setModalOpen(false);
+                    loadArticles();
+                } catch (err) { alert(err.message); }
+                setLoading(false);
+            };
+
+            const statusColors = {
+                published: 'status-published',
+                draft: 'status-draft',
+                archived: 'status-archived'
+            };
+
+            return (
+                <div className="articles-manager">
+                    <div className="articles-toolbar">
+                        <div className="filters">
+                            <select
+                                className="filter-select"
+                                value={filters.website_id}
+                                onChange={e => setFilters({...filters, website_id: e.target.value})}
+                            >
+                                <option value="">All Websites</option>
+                                {websites.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                            </select>
+                            <select
+                                className="filter-select"
+                                value={filters.status}
+                                onChange={e => setFilters({...filters, status: e.target.value})}
+                            >
+                                <option value="">All Status</option>
+                                <option value="published">Published</option>
+                                <option value="draft">Draft</option>
+                            </select>
+                            <input
+                                type="text"
+                                className="filter-input"
+                                placeholder="Search articles..."
+                                value={filters.search}
+                                onChange={e => setFilters({...filters, search: e.target.value})}
+                            />
+                        </div>
+                        <div className="toolbar-stats">
+                            <span className="stat-badge">{total} articles</span>
+                        </div>
+                    </div>
+
+                    {loading ? (
+                        <div className="loading-state">Loading articles...</div>
+                    ) : (
+                        <div className="articles-grid">
+                            {articles.map(article => (
+                                <div key={article.id} className="article-card">
+                                    <div className="article-image">
+                                        {article.featured_image ? (
+                                            <img src={article.featured_image} alt="" />
+                                        ) : (
+                                            <div className="no-image">No Image</div>
+                                        )}
+                                    </div>
+                                    <div className="article-content">
+                                        <div className="article-meta">
+                                            <span className={'article-status ' + statusColors[article.status]}>{article.status}</span>
+                                            <span className="article-website">{article.website_name}</span>
+                                        </div>
+                                        <h3 className="article-title">{article.title}</h3>
+                                        <p className="article-summary">{article.summary?.substring(0, 120)}...</p>
+                                        <div className="article-footer">
+                                            <span className="article-views">{article.views} views</span>
+                                            <span className="article-date">{new Date(article.updated_at).toLocaleDateString()}</span>
+                                        </div>
+                                        <div className="article-actions">
+                                            <button className="btn-icon" onClick={() => handleEdit(article)} title="Edit">Edit</button>
+                                            {article.status === 'draft' ? (
+                                                <button className="btn-icon btn-publish" onClick={() => handlePublish(article)} title="Publish">Publish</button>
+                                            ) : (
+                                                <button className="btn-icon btn-unpublish" onClick={() => handleUnpublish(article)} title="Unpublish">Unpublish</button>
+                                            )}
+                                            <button className="btn-icon btn-delete" onClick={() => handleDelete(article)} title="Delete">Delete</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingArticle ? 'Edit Article' : 'Create Article'}>
+                        <div className="article-form">
+                            <div className="form-row">
+                                <label>Title *</label>
+                                <input type="text" value={formValues.title || ''} onChange={e => setFormValues({...formValues, title: e.target.value})} />
+                            </div>
+                            <div className="form-row">
+                                <label>Slug</label>
+                                <input type="text" value={formValues.slug || ''} onChange={e => setFormValues({...formValues, slug: e.target.value})} placeholder="auto-generated if empty" />
+                            </div>
+                            <div className="form-row-half">
+                                <div className="form-row">
+                                    <label>Website</label>
+                                    <select value={formValues.website_id || ''} onChange={e => setFormValues({...formValues, website_id: parseInt(e.target.value)})}>
+                                        {websites.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="form-row">
+                                    <label>Category</label>
+                                    <select value={formValues.category_id || ''} onChange={e => setFormValues({...formValues, category_id: parseInt(e.target.value)})}>
+                                        <option value="">Select category</option>
+                                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="form-row">
+                                <label>Summary</label>
+                                <textarea rows="3" value={formValues.summary || ''} onChange={e => setFormValues({...formValues, summary: e.target.value})} />
+                            </div>
+                            <div className="form-row">
+                                <label>Content</label>
+                                <textarea rows="10" value={formValues.content || ''} onChange={e => setFormValues({...formValues, content: e.target.value})} />
+                            </div>
+                            <div className="form-row">
+                                <label>Featured Image URL</label>
+                                <input type="text" value={formValues.featured_image || ''} onChange={e => setFormValues({...formValues, featured_image: e.target.value})} />
+                            </div>
+                            <div className="form-row-half">
+                                <div className="form-row">
+                                    <label>Meta Title</label>
+                                    <input type="text" value={formValues.meta_title || ''} onChange={e => setFormValues({...formValues, meta_title: e.target.value})} />
+                                </div>
+                                <div className="form-row">
+                                    <label>Status</label>
+                                    <select value={formValues.status || 'draft'} onChange={e => setFormValues({...formValues, status: e.target.value})}>
+                                        <option value="draft">Draft</option>
+                                        <option value="published">Published</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="form-row">
+                                <label>Meta Description</label>
+                                <textarea rows="2" value={formValues.meta_description || ''} onChange={e => setFormValues({...formValues, meta_description: e.target.value})} />
+                            </div>
+                            <div className="form-actions">
+                                <button className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancel</button>
+                                <button className="btn btn-primary" onClick={handleSubmit} disabled={loading}>
+                                    {loading ? 'Saving...' : (editingArticle ? 'Update Article' : 'Create Article')}
+                                </button>
+                            </div>
+                        </div>
+                    </Modal>
+                </div>
+            );
+        }
+
         // App Component
         function App() {
             const [loading, setLoading] = React.useState(false);
@@ -281,6 +556,9 @@ func (r *Renderer) GenerateHTMLWithBasePath(data *PageData, basePath string) (st
             const fields = PAGE_DATA.fields || [];
             const modules = PAGE_DATA.modules || [];
             const entities = PAGE_DATA.entities || [];
+
+            // Check if this is articles page
+            const isArticlesPage = page.page_type?.startsWith('articles_');
 
             // Load data for entity pages
             React.useEffect(() => {
@@ -347,7 +625,7 @@ func (r *Renderer) GenerateHTMLWithBasePath(data *PageData, basePath string) (st
                             <div className="logo">Genesis</div>
                             <div className="tenant-name">{PAGE_DATA.tenant?.name}</div>
                         </div>
-                        <Navigation modules={modules} entities={entities} currentPath={window.location.pathname} basePath={BASE_PATH} />
+                        <Navigation modules={modules} entities={entities} currentPath={window.location.pathname} basePath={BASE_PATH} showArticles={true} />
                         <div className="sidebar-footer">
                             <div className="user-info">
                                 <div className="user-avatar">{(PAGE_DATA.user?.first_name || 'U')[0]}</div>
@@ -362,10 +640,12 @@ func (r *Renderer) GenerateHTMLWithBasePath(data *PageData, basePath string) (st
                         <header className="header">
                             <h1 className="page-title">{page.title || page.name}</h1>
                             <div className="header-actions">
-                                {entity && <Button onClick={handleCreate}>+ Create {entity.name}</Button>}
+                                {isArticlesPage && <Button onClick={() => window.dispatchEvent(new CustomEvent('createArticle'))}>+ New Article</Button>}
+                                {entity && !isArticlesPage && <Button onClick={handleCreate}>+ Create {entity.name}</Button>}
                             </div>
                         </header>
                         <div className="content">
+                            {isArticlesPage && <ArticlesManager />}
                             {page.page_type === 'entity_list' && entity && (
                                 <DataGrid
                                     entity={entity}
@@ -431,123 +711,202 @@ func (r *Renderer) buildComponentCode(components []models.UIComponent) string {
 
 // buildCSS builds CSS from theme
 func (r *Renderer) buildCSS(theme *models.UITheme) string {
-	// Default CSS
+	// Aethra-style clean light CSS (matching intranet panel)
 	css := `
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f0f1a;
-            min-height: 100vh;
-            color: #fff;
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        :root {
+            --primary: #4f46e5;
+            --primary-light: #6366f1;
+            --primary-dark: #4338ca;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg-body: #f9fafb;
+            --bg-white: #ffffff;
+            --bg-gray: #f3f4f6;
+            --border: #e5e7eb;
+            --border-light: #f3f4f6;
+            --text: #111827;
+            --text-secondary: #374151;
+            --text-muted: #6b7280;
+            --text-light: #9ca3af;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
         }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-body);
+            min-height: 100vh;
+            color: var(--text);
+            line-height: 1.5;
+        }
+
         .app { display: flex; min-height: 100vh; }
 
-        /* Sidebar */
+        /* Sidebar - White with subtle border */
         .sidebar {
             width: 260px;
-            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
-            border-right: 1px solid rgba(255,255,255,0.1);
+            background: var(--bg-white);
+            border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
         }
         .sidebar-header {
             padding: 20px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            background: linear-gradient(to bottom, #eef2ff, var(--bg-white));
+            border-bottom: 1px solid var(--border);
         }
         .logo {
-            font-size: 24px;
-            font-weight: bold;
-            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--primary);
         }
         .tenant-name {
-            font-size: 12px;
-            color: rgba(255,255,255,0.5);
+            font-size: 13px;
+            color: var(--text-muted);
             margin-top: 4px;
         }
-        .nav { flex: 1; padding: 20px 0; }
-        .nav-section { padding: 0 20px; margin-bottom: 20px; }
+
+        .nav { flex: 1; padding: 16px 0; overflow-y: auto; }
+        .nav-section { padding: 0 12px; margin-bottom: 20px; }
         .nav-section-title {
             font-size: 11px;
+            font-weight: 600;
             text-transform: uppercase;
-            color: rgba(255,255,255,0.4);
-            margin-bottom: 10px;
-            letter-spacing: 1px;
+            color: var(--text-light);
+            margin-bottom: 8px;
+            padding: 0 12px;
+            letter-spacing: 0.5px;
         }
         .nav-item {
             display: flex;
             align-items: center;
             gap: 12px;
-            padding: 12px 20px;
-            color: rgba(255,255,255,0.7);
+            padding: 10px 12px;
+            margin: 2px 0;
+            color: var(--text-secondary);
             text-decoration: none;
             cursor: pointer;
-            transition: all 0.2s;
-            border-left: 3px solid transparent;
+            transition: all 0.15s ease;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 14px;
         }
         .nav-item:hover {
-            background: rgba(255,255,255,0.05);
-            color: #fff;
+            background: var(--bg-gray);
+            color: var(--primary);
         }
         .nav-item.active {
-            background: rgba(0,212,255,0.1);
-            color: #00d4ff;
-            border-left-color: #00d4ff;
+            background: #eef2ff;
+            color: var(--primary);
         }
-        .nav-icon { width: 20px; text-align: center; }
-        .sidebar-footer {
-            padding: 20px;
-            border-top: 1px solid rgba(255,255,255,0.1);
-        }
-        .user-info { display: flex; align-items: center; gap: 12px; }
-        .user-avatar {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+        .nav-icon {
+            width: 20px;
+            height: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: bold;
+            font-size: 14px;
         }
-        .user-name { font-size: 14px; font-weight: 500; }
-        .user-role { font-size: 11px; color: rgba(255,255,255,0.5); }
+
+        .sidebar-footer {
+            padding: 16px;
+            border-top: 1px solid var(--border);
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px;
+            border-radius: 8px;
+            transition: background 0.15s;
+            cursor: pointer;
+        }
+        .user-info:hover { background: var(--bg-gray); }
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .user-name { font-size: 14px; font-weight: 500; color: var(--text); }
+        .user-role { font-size: 12px; color: var(--text-muted); }
 
         /* Main Content */
-        .main { flex: 1; display: flex; flex-direction: column; }
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-body);
+        }
         .header {
-            padding: 20px 30px;
-            background: rgba(255,255,255,0.02);
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding: 20px 32px;
+            background: var(--bg-white);
+            border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
-        .page-title { font-size: 24px; font-weight: 600; }
-        .content { flex: 1; padding: 30px; overflow-y: auto; }
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .content {
+            flex: 1;
+            padding: 24px 32px;
+            overflow-y: auto;
+        }
 
         /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
-            margin-bottom: 30px;
+            margin-bottom: 24px;
         }
         .stat-card {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.1);
+            background: var(--bg-white);
+            border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 24px;
+            padding: 20px;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow-sm);
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+        .stat-icon {
+            font-size: 28px;
+            margin-bottom: 12px;
         }
         .stat-value {
-            font-size: 36px;
+            font-size: 32px;
             font-weight: 700;
-            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: var(--text);
         }
-        .stat-label { font-size: 14px; color: rgba(255,255,255,0.5); margin-top: 4px; }
+        .stat-label {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
 
         /* Buttons */
         .btn {
@@ -557,120 +916,447 @@ func (r *Renderer) buildCSS(theme *models.UITheme) string {
             font-size: 14px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s ease;
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
+            font-family: inherit;
         }
         .btn-primary {
-            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
-            color: #fff;
+            background: var(--primary);
+            color: white;
         }
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0,212,255,0.3);
+            background: var(--primary-dark);
         }
-        .btn-secondary { background: rgba(255,255,255,0.1); color: #fff; }
-        .btn-secondary:hover { background: rgba(255,255,255,0.15); }
-        .btn-danger { background: #ef4444; color: #fff; }
-        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        .btn-secondary {
+            background: var(--bg-white);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+        .btn-secondary:hover {
+            background: var(--bg-gray);
+        }
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        .btn-sm { padding: 6px 12px; font-size: 13px; }
 
         /* Tables */
         .table-container {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.1);
+            background: var(--bg-white);
+            border: 1px solid var(--border);
             border-radius: 12px;
             overflow: hidden;
+            box-shadow: var(--shadow-sm);
         }
         table { width: 100%; border-collapse: collapse; }
-        th, td {
-            padding: 16px 20px;
-            text-align: left;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
+        th, td { padding: 14px 20px; text-align: left; }
         th {
-            background: rgba(255,255,255,0.03);
+            background: var(--bg-gray);
             font-size: 12px;
+            font-weight: 600;
             text-transform: uppercase;
-            color: rgba(255,255,255,0.5);
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
         }
-        tr:hover td { background: rgba(255,255,255,0.02); }
-        .actions { display: flex; gap: 8px; }
+        td {
+            border-bottom: 1px solid var(--border-light);
+            font-size: 14px;
+            color: var(--text);
+        }
+        tr:hover td { background: var(--bg-gray); }
+        tr:last-child td { border-bottom: none; }
+        .actions { display: flex; gap: 8px; justify-content: flex-end; }
 
         /* Forms */
         .form-group { margin-bottom: 20px; }
         .form-label {
             display: block;
-            font-size: 13px;
-            color: rgba(255,255,255,0.7);
-            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
         }
         .form-input {
             width: 100%;
-            padding: 12px 16px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
+            padding: 10px 14px;
+            background: var(--bg-white);
+            border: 1px solid var(--border);
             border-radius: 8px;
-            color: #fff;
+            color: var(--text);
             font-size: 14px;
+            font-family: inherit;
+            transition: all 0.15s;
         }
-        .form-input:focus { outline: none; border-color: #00d4ff; }
-        .form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
-        .required { color: #ef4444; }
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+        .form-input::placeholder { color: var(--text-light); }
+        textarea.form-input { min-height: 100px; resize: vertical; }
+        select.form-input {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 40px;
+        }
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-light);
+        }
 
         /* Modal */
         .modal-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0, 0, 0, 0.5);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 1000;
+            animation: fadeIn 0.15s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
         .modal {
-            background: #1a1a2e;
-            border: 1px solid rgba(255,255,255,0.1);
+            background: var(--bg-white);
             border-radius: 16px;
             width: 100%;
-            max-width: 500px;
+            max-width: 560px;
             max-height: 90vh;
             overflow-y: auto;
+            box-shadow: var(--shadow-lg);
+            animation: slideUp 0.2s ease;
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .modal-header {
             padding: 20px 24px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
-        .modal-title { font-size: 18px; font-weight: 600; }
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text);
+        }
         .modal-close {
-            background: none;
+            background: transparent;
             border: none;
-            color: rgba(255,255,255,0.5);
-            font-size: 24px;
+            color: var(--text-muted);
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            font-size: 18px;
             cursor: pointer;
+            transition: all 0.15s;
+        }
+        .modal-close:hover {
+            background: var(--bg-gray);
+            color: var(--text);
         }
         .modal-body { padding: 24px; }
+        .modal-lg { max-width: 720px; }
 
         /* Empty State */
-        .empty-state { text-align: center; padding: 60px 20px; color: rgba(255,255,255,0.5); }
+        .empty-state {
+            text-align: center;
+            padding: 60px 40px;
+            background: var(--bg-white);
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+        }
         .empty-icon { font-size: 48px; margin-bottom: 16px; }
-        .empty-title { font-size: 18px; color: #fff; margin-bottom: 8px; }
-        .empty-text { margin-bottom: 20px; }
+        .empty-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+        .empty-text {
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
 
         /* Loading */
-        .loading { display: flex; align-items: center; justify-content: center; padding: 40px; }
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            flex-direction: column;
+            gap: 12px;
+        }
         .spinner {
             width: 32px;
             height: 32px;
-            border: 3px solid rgba(255,255,255,0.1);
-            border-top-color: #00d4ff;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
             border-radius: 50%;
-            animation: spin 1s linear infinite;
+            animation: spin 0.6s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Badges */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .badge-success { background: #d1fae5; color: #065f46; }
+        .badge-warning { background: #fef3c7; color: #92400e; }
+        .badge-danger { background: #fee2e2; color: #991b1b; }
+        .badge-primary { background: #e0e7ff; color: #3730a3; }
+
+        /* Card styles */
+        .card {
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: var(--shadow-sm);
+        }
+        .card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .card-title { font-size: 16px; font-weight: 600; }
+        .card-body { padding: 20px; }
+
+        /* Articles Manager */
+        .articles-manager { max-width: 100%; }
+        .articles-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 16px 20px;
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: var(--shadow-sm);
+        }
+        .filters {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .filter-select, .filter-input {
+            padding: 8px 14px;
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+            min-width: 140px;
+        }
+        .filter-select:focus, .filter-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        .stat-badge {
+            padding: 6px 14px;
+            background: #e0e7ff;
+            color: #3730a3;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .loading-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+        .articles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }
+        .article-card {
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow-sm);
+        }
+        .article-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+        .article-image {
+            height: 160px;
+            overflow: hidden;
+            background: var(--bg-gray);
+        }
+        .article-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .no-image {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-light);
+            font-size: 14px;
+        }
+        .article-content { padding: 16px; }
+        .article-meta {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .article-status {
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-published { background: #d1fae5; color: #065f46; }
+        .status-draft { background: #fef3c7; color: #92400e; }
+        .status-archived { background: var(--bg-gray); color: var(--text-muted); }
+        .article-website {
+            padding: 3px 8px;
+            background: var(--bg-gray);
+            border-radius: 4px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+        .article-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 6px;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .article-summary {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .article-footer {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-light);
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-light);
+            margin-bottom: 12px;
+        }
+        .article-actions { display: flex; gap: 6px; }
+        .article-actions .btn-icon {
+            padding: 6px 12px;
+            background: var(--bg-gray);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-muted);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .article-actions .btn-icon:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+        .article-actions .btn-publish:hover { background: var(--success); border-color: var(--success); }
+        .article-actions .btn-unpublish:hover { background: var(--warning); border-color: var(--warning); }
+        .article-actions .btn-delete:hover { background: var(--danger); border-color: var(--danger); }
+
+        /* Article Form */
+        .article-form { padding: 4px; }
+        .article-form .form-row { margin-bottom: 16px; }
+        .article-form .form-row label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+        .article-form input,
+        .article-form select,
+        .article-form textarea {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+        }
+        .article-form input:focus,
+        .article-form select:focus,
+        .article-form textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+        .article-form textarea { min-height: 100px; resize: vertical; }
+        .form-row-half {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        .article-form .form-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-light);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .sidebar { width: 220px; }
+            .content { padding: 20px; }
+        }
+        @media (max-width: 768px) {
+            .app { flex-direction: column; }
+            .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+            .content { padding: 16px; }
+            .articles-grid { grid-template-columns: 1fr; }
+            .form-row-half { grid-template-columns: 1fr; }
+        }
     `
 
 	return css
