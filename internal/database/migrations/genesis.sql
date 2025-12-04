@@ -644,10 +644,663 @@ CREATE INDEX idx_permissions_entity ON permissions(entity_id);
 CREATE INDEX idx_menu_items_menu ON menu_items(menu_id);
 
 -- ============================================================================
+-- UI COMPONENTS: React components stored in database
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- UI Components: Reusable React components
+-- ----------------------------------------------------------------------------
+CREATE TABLE ui_components (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,  -- NULL = system component
+
+    code VARCHAR(100) UNIQUE NOT NULL,          -- 'DataGrid', 'Form', 'Button'
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    category VARCHAR(50),                       -- 'layout', 'input', 'display', 'data'
+
+    -- Component code (JSX/React)
+    code_jsx TEXT NOT NULL,                     -- The actual React component code
+
+    -- Props definition
+    props_schema JSONB DEFAULT '{}',            -- JSON Schema for props
+
+    -- Dependencies
+    dependencies TEXT[] DEFAULT '{}',           -- ['react', 'lodash']
+
+    -- Settings
+    is_system BOOLEAN DEFAULT FALSE,            -- System component, can't edit
+    is_active BOOLEAN DEFAULT TRUE,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ----------------------------------------------------------------------------
+-- UI Layouts: Page layouts (header, sidebar, footer, content areas)
+-- ----------------------------------------------------------------------------
+CREATE TABLE ui_layouts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+
+    code VARCHAR(100) NOT NULL,                 -- 'default', 'admin', 'minimal'
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+
+    -- Layout structure (JSX with slots)
+    code_jsx TEXT NOT NULL,                     -- Layout with {children}, {sidebar}, etc.
+
+    -- Slots definition
+    slots JSONB DEFAULT '["content"]',          -- Available slots
+
+    -- Settings
+    is_default BOOLEAN DEFAULT FALSE,
+    is_system BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE(tenant_id, code)
+);
+
+-- ----------------------------------------------------------------------------
+-- UI Pages: Dynamic pages composed of components
+-- ----------------------------------------------------------------------------
+CREATE TABLE ui_pages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+
+    code VARCHAR(100) NOT NULL,                 -- 'dashboard', 'customers', 'settings'
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+
+    -- Route
+    route VARCHAR(255) NOT NULL,                -- '/dashboard', '/m/:module/:entity'
+
+    -- Layout
+    layout_id UUID REFERENCES ui_layouts(id) ON DELETE SET NULL,
+
+    -- Page type
+    page_type VARCHAR(50) NOT NULL,             -- 'static', 'entity_list', 'entity_detail', 'entity_form', 'custom'
+
+    -- For entity pages
+    entity_id UUID REFERENCES entities(id) ON DELETE CASCADE,
+
+    -- Page content (JSX or component composition)
+    code_jsx TEXT,                              -- Custom page code
+    components JSONB DEFAULT '[]',              -- Component instances with props
+
+    -- Settings
+    title VARCHAR(255),                         -- Page title
+    icon VARCHAR(50),
+    requires_auth BOOLEAN DEFAULT TRUE,
+    required_permission VARCHAR(50),
+
+    is_system BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+
+    display_order INT DEFAULT 0,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE(tenant_id, route)
+);
+
+-- ----------------------------------------------------------------------------
+-- UI Themes: Visual themes (colors, fonts, etc.)
+-- ----------------------------------------------------------------------------
+CREATE TABLE ui_themes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+
+    code VARCHAR(50) NOT NULL,                  -- 'dark', 'light', 'custom'
+    name VARCHAR(100) NOT NULL,
+
+    -- Theme variables
+    variables JSONB NOT NULL DEFAULT '{
+        "colors": {
+            "primary": "#00d4ff",
+            "secondary": "#7b2cbf",
+            "background": "#0f0f1a",
+            "surface": "#1a1a2e",
+            "text": "#ffffff",
+            "textMuted": "rgba(255,255,255,0.5)",
+            "border": "rgba(255,255,255,0.1)",
+            "success": "#10b981",
+            "warning": "#f59e0b",
+            "error": "#ef4444"
+        },
+        "fonts": {
+            "body": "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif",
+            "mono": "Consolas, Monaco, monospace"
+        },
+        "spacing": {
+            "xs": "4px",
+            "sm": "8px",
+            "md": "16px",
+            "lg": "24px",
+            "xl": "32px"
+        },
+        "borderRadius": {
+            "sm": "4px",
+            "md": "8px",
+            "lg": "16px"
+        }
+    }',
+
+    -- Custom CSS overrides
+    custom_css TEXT,
+
+    is_default BOOLEAN DEFAULT FALSE,
+    is_system BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE(tenant_id, code)
+);
+
+-- Indexes for UI tables
+CREATE INDEX idx_ui_components_tenant ON ui_components(tenant_id);
+CREATE INDEX idx_ui_components_category ON ui_components(category);
+CREATE INDEX idx_ui_layouts_tenant ON ui_layouts(tenant_id);
+CREATE INDEX idx_ui_pages_tenant ON ui_pages(tenant_id);
+CREATE INDEX idx_ui_pages_route ON ui_pages(tenant_id, route);
+CREATE INDEX idx_ui_pages_entity ON ui_pages(entity_id);
+CREATE INDEX idx_ui_themes_tenant ON ui_themes(tenant_id);
+
+-- Triggers for UI tables
+CREATE TRIGGER update_ui_components_updated_at BEFORE UPDATE ON ui_components FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_ui_layouts_updated_at BEFORE UPDATE ON ui_layouts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_ui_pages_updated_at BEFORE UPDATE ON ui_pages FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_ui_themes_updated_at BEFORE UPDATE ON ui_themes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
 -- COMMENTS
 -- ============================================================================
 
+COMMENT ON TABLE ui_components IS 'Reusable React components stored in database';
+COMMENT ON TABLE ui_layouts IS 'Page layouts with slots for content';
+COMMENT ON TABLE ui_pages IS 'Dynamic pages composed of components';
+COMMENT ON TABLE ui_themes IS 'Visual themes (colors, fonts, spacing)';
 COMMENT ON TABLE tenants IS 'Κάθε πελάτης/εταιρεία - multi-tenant isolation';
+
+-- ============================================================================
+-- DEFAULT UI COMPONENTS
+-- ============================================================================
+
+-- Default Layout
+INSERT INTO ui_layouts (code, name, description, code_jsx, slots, is_system, is_default) VALUES
+('admin', 'Admin Layout', 'Main admin layout with sidebar', '
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">Genesis</div>
+      <div class="tenant-name">{tenant.name}</div>
+    </div>
+    <nav class="nav">
+      {navigation}
+    </nav>
+    <div class="sidebar-footer">
+      {user_menu}
+    </div>
+  </aside>
+  <main class="main">
+    <header class="header">
+      <h1 class="page-title">{page.title}</h1>
+      <div class="header-actions">{actions}</div>
+    </header>
+    <div class="content">
+      {content}
+    </div>
+  </main>
+</div>
+', '["navigation", "user_menu", "actions", "content"]', true, true);
+
+-- Default Theme
+INSERT INTO ui_themes (code, name, variables, is_system, is_default) VALUES
+('genesis-dark', 'Genesis Dark', '{
+  "colors": {
+    "primary": "#00d4ff",
+    "secondary": "#7b2cbf",
+    "background": "#0f0f1a",
+    "surface": "#1a1a2e",
+    "surfaceHover": "rgba(255,255,255,0.05)",
+    "text": "#ffffff",
+    "textMuted": "rgba(255,255,255,0.5)",
+    "border": "rgba(255,255,255,0.1)",
+    "success": "#10b981",
+    "warning": "#f59e0b",
+    "error": "#ef4444",
+    "info": "#3b82f6"
+  },
+  "fonts": {
+    "body": "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif",
+    "heading": "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif",
+    "mono": "Consolas, Monaco, monospace"
+  },
+  "fontSizes": {
+    "xs": "11px",
+    "sm": "12px",
+    "md": "14px",
+    "lg": "16px",
+    "xl": "20px",
+    "xxl": "24px"
+  },
+  "spacing": {
+    "xs": "4px",
+    "sm": "8px",
+    "md": "16px",
+    "lg": "24px",
+    "xl": "32px"
+  },
+  "borderRadius": {
+    "sm": "4px",
+    "md": "8px",
+    "lg": "12px",
+    "xl": "16px",
+    "full": "9999px"
+  },
+  "shadows": {
+    "sm": "0 1px 2px rgba(0,0,0,0.3)",
+    "md": "0 4px 12px rgba(0,0,0,0.4)",
+    "lg": "0 8px 24px rgba(0,0,0,0.5)"
+  }
+}', true, true);
+
+-- Core UI Components
+INSERT INTO ui_components (code, name, category, code_jsx, props_schema, is_system) VALUES
+
+-- Button Component
+('Button', 'Button', 'input', '
+function Button({ children, variant = "primary", size = "md", icon, loading, disabled, onClick }) {
+  const baseClass = "btn";
+  const variantClass = `btn-${variant}`;
+  const sizeClass = `btn-${size}`;
+
+  return (
+    <button
+      className={`${baseClass} ${variantClass} ${sizeClass}`}
+      onClick={onClick}
+      disabled={disabled || loading}
+    >
+      {loading && <span className="spinner" />}
+      {icon && <span className="btn-icon">{icon}</span>}
+      {children}
+    </button>
+  );
+}
+', '{
+  "type": "object",
+  "properties": {
+    "variant": {"type": "string", "enum": ["primary", "secondary", "danger", "ghost"]},
+    "size": {"type": "string", "enum": ["sm", "md", "lg"]},
+    "icon": {"type": "string"},
+    "loading": {"type": "boolean"},
+    "disabled": {"type": "boolean"}
+  }
+}', true),
+
+-- TextInput Component
+('TextInput', 'Text Input', 'input', '
+function TextInput({ label, value, onChange, placeholder, error, required, disabled, type = "text" }) {
+  return (
+    <div className="form-group">
+      {label && <label className="form-label">{label} {required && <span className="required">*</span>}</label>}
+      <input
+        type={type}
+        className={`form-input ${error ? "error" : ""}`}
+        value={value || ""}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+      />
+      {error && <span className="form-error">{error}</span>}
+    </div>
+  );
+}
+', '{
+  "type": "object",
+  "properties": {
+    "label": {"type": "string"},
+    "placeholder": {"type": "string"},
+    "required": {"type": "boolean"},
+    "disabled": {"type": "boolean"},
+    "type": {"type": "string", "enum": ["text", "email", "password", "number", "tel", "url"]}
+  }
+}', true),
+
+-- Select Component
+('Select', 'Select', 'input', '
+function Select({ label, value, onChange, options = [], placeholder, error, required, disabled }) {
+  return (
+    <div className="form-group">
+      {label && <label className="form-label">{label} {required && <span className="required">*</span>}</label>}
+      <select
+        className={`form-input ${error ? "error" : ""}`}
+        value={value || ""}
+        onChange={e => onChange(e.target.value)}
+        disabled={disabled}
+      >
+        {placeholder && <option value="">{placeholder}</option>}
+        {options.map(opt => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+      {error && <span className="form-error">{error}</span>}
+    </div>
+  );
+}
+', '{
+  "type": "object",
+  "properties": {
+    "label": {"type": "string"},
+    "options": {"type": "array", "items": {"type": "object", "properties": {"value": {"type": "string"}, "label": {"type": "string"}}}},
+    "placeholder": {"type": "string"},
+    "required": {"type": "boolean"}
+  }
+}', true),
+
+-- DataGrid Component
+('DataGrid', 'Data Grid', 'data', '
+function DataGrid({ entity, columns, data = [], loading, onRowClick, onEdit, onDelete, onCreate }) {
+  if (loading) {
+    return <div className="loading"><div className="spinner" /></div>;
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="empty-state">
+        <div className="empty-icon">📋</div>
+        <div className="empty-title">No {entity.name_plural || entity.name + "s"} yet</div>
+        <div className="empty-text">Create your first record to get started</div>
+        {onCreate && <button className="btn btn-primary" onClick={onCreate}>+ Create {entity.name}</button>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="table-container">
+      <table>
+        <thead>
+          <tr>
+            {columns.map(col => (
+              <th key={col.code}>{col.name}</th>
+            ))}
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map(row => (
+            <tr key={row.id} onClick={() => onRowClick && onRowClick(row)}>
+              {columns.map(col => (
+                <td key={col.code}>{formatValue(row[col.code], col)}</td>
+              ))}
+              <td className="actions">
+                {onEdit && <button className="btn btn-sm btn-secondary" onClick={e => { e.stopPropagation(); onEdit(row); }}>Edit</button>}
+                {onDelete && <button className="btn btn-sm btn-danger" onClick={e => { e.stopPropagation(); onDelete(row); }}>Delete</button>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function formatValue(value, field) {
+  if (value === null || value === undefined) return "-";
+  if (field.field_type === "boolean") return value ? "✓" : "✗";
+  if (field.field_type === "date") return new Date(value).toLocaleDateString();
+  if (field.field_type === "datetime") return new Date(value).toLocaleString();
+  return String(value);
+}
+', '{
+  "type": "object",
+  "properties": {
+    "entity": {"type": "object"},
+    "columns": {"type": "array"},
+    "data": {"type": "array"}
+  }
+}', true),
+
+-- DynamicForm Component
+('DynamicForm', 'Dynamic Form', 'data', '
+function DynamicForm({ entity, fields, values = {}, onChange, onSubmit, onCancel, loading, mode = "create" }) {
+  const handleFieldChange = (code, value) => {
+    onChange({ ...values, [code]: value });
+  };
+
+  const renderField = (field) => {
+    const value = values[field.code];
+    const commonProps = {
+      key: field.id,
+      label: field.name,
+      value: value,
+      onChange: (val) => handleFieldChange(field.code, val),
+      required: field.is_required,
+      placeholder: field.placeholder,
+      disabled: loading
+    };
+
+    switch (field.field_type_code) {
+      case "string":
+      case "email":
+      case "url":
+      case "phone":
+        return <TextInput {...commonProps} type={field.field_type_code === "email" ? "email" : "text"} />;
+      case "text":
+      case "richtext":
+        return <TextArea {...commonProps} />;
+      case "integer":
+      case "decimal":
+        return <TextInput {...commonProps} type="number" />;
+      case "boolean":
+        return <Checkbox {...commonProps} />;
+      case "date":
+        return <TextInput {...commonProps} type="date" />;
+      case "datetime":
+        return <TextInput {...commonProps} type="datetime-local" />;
+      case "enum":
+        return <Select {...commonProps} options={field.options || []} />;
+      default:
+        return <TextInput {...commonProps} />;
+    }
+  };
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit(values); }} className="dynamic-form">
+      <div className="form-fields">
+        {fields.filter(f => f.in_form !== false).map(renderField)}
+      </div>
+      <div className="form-actions">
+        {onCancel && <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={loading}>Cancel</button>}
+        <button type="submit" className="btn btn-primary" disabled={loading}>
+          {loading ? "Saving..." : (mode === "create" ? "Create" : "Save")}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function TextArea({ label, value, onChange, placeholder, required, disabled }) {
+  return (
+    <div className="form-group">
+      {label && <label className="form-label">{label} {required && <span className="required">*</span>}</label>}
+      <textarea
+        className="form-input"
+        value={value || ""}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+        rows={4}
+      />
+    </div>
+  );
+}
+
+function Checkbox({ label, value, onChange, disabled }) {
+  return (
+    <div className="form-group form-checkbox">
+      <label className="checkbox-label">
+        <input
+          type="checkbox"
+          checked={!!value}
+          onChange={e => onChange(e.target.checked)}
+          disabled={disabled}
+        />
+        {label}
+      </label>
+    </div>
+  );
+}
+', '{
+  "type": "object",
+  "properties": {
+    "entity": {"type": "object"},
+    "fields": {"type": "array"},
+    "values": {"type": "object"},
+    "mode": {"type": "string", "enum": ["create", "edit"]}
+  }
+}', true),
+
+-- Card Component
+('Card', 'Card', 'layout', '
+function Card({ title, children, actions, collapsible, defaultCollapsed }) {
+  const [collapsed, setCollapsed] = React.useState(defaultCollapsed);
+
+  return (
+    <div className={`card ${collapsed ? "collapsed" : ""}`}>
+      {title && (
+        <div className="card-header">
+          <h3 className="card-title">
+            {collapsible && (
+              <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)}>
+                {collapsed ? "▶" : "▼"}
+              </button>
+            )}
+            {title}
+          </h3>
+          {actions && <div className="card-actions">{actions}</div>}
+        </div>
+      )}
+      {!collapsed && <div className="card-body">{children}</div>}
+    </div>
+  );
+}
+', '{
+  "type": "object",
+  "properties": {
+    "title": {"type": "string"},
+    "collapsible": {"type": "boolean"},
+    "defaultCollapsed": {"type": "boolean"}
+  }
+}', true),
+
+-- StatCard Component
+('StatCard', 'Stat Card', 'display', '
+function StatCard({ label, value, icon, trend, trendDirection }) {
+  return (
+    <div className="stat-card">
+      {icon && <div className="stat-icon">{icon}</div>}
+      <div className="stat-content">
+        <div className="stat-value">{value}</div>
+        <div className="stat-label">{label}</div>
+        {trend && (
+          <div className={`stat-trend ${trendDirection}`}>
+            {trendDirection === "up" ? "↑" : "↓"} {trend}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+', '{
+  "type": "object",
+  "properties": {
+    "label": {"type": "string"},
+    "value": {"type": ["string", "number"]},
+    "icon": {"type": "string"},
+    "trend": {"type": "string"},
+    "trendDirection": {"type": "string", "enum": ["up", "down"]}
+  }
+}', true),
+
+-- Modal Component
+('Modal', 'Modal', 'layout', '
+function Modal({ isOpen, onClose, title, children, footer, size = "md" }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className={`modal modal-${size}`} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">{title}</h2>
+          <button className="modal-close" onClick={onClose}>&times;</button>
+        </div>
+        <div className="modal-body">{children}</div>
+        {footer && <div className="modal-footer">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+', '{
+  "type": "object",
+  "properties": {
+    "title": {"type": "string"},
+    "size": {"type": "string", "enum": ["sm", "md", "lg", "xl"]}
+  }
+}', true),
+
+-- Navigation Component
+('Navigation', 'Navigation', 'layout', '
+function Navigation({ modules, entities, currentPath }) {
+  const moduleMap = {};
+  modules.forEach(m => moduleMap[m.id] = { ...m, entities: [] });
+  entities.forEach(e => {
+    if (e.module_id && moduleMap[e.module_id]) {
+      moduleMap[e.module_id].entities.push(e);
+    }
+  });
+
+  return (
+    <nav className="nav">
+      <div className="nav-section">
+        <div className="nav-section-title">Overview</div>
+        <a href="/app" className={`nav-item ${currentPath === "/app" ? "active" : ""}`}>
+          <span className="nav-icon">📊</span>
+          Dashboard
+        </a>
+      </div>
+      {Object.values(moduleMap).map(mod => (
+        <div key={mod.id} className="nav-section">
+          <div className="nav-section-title">{mod.icon} {mod.name}</div>
+          {mod.entities.map(ent => (
+            <a
+              key={ent.id}
+              href={`/app/${mod.code}/${ent.code}`}
+              className={`nav-item ${currentPath === `/app/${mod.code}/${ent.code}` ? "active" : ""}`}
+            >
+              <span className="nav-icon">{ent.icon || "📄"}</span>
+              {ent.name_plural || ent.name}
+            </a>
+          ))}
+        </div>
+      ))}
+    </nav>
+  );
+}
+', '{
+  "type": "object",
+  "properties": {
+    "modules": {"type": "array"},
+    "entities": {"type": "array"},
+    "currentPath": {"type": "string"}
+  }
+}', true);
 COMMENT ON TABLE entities IS 'Meta-table: Ορίζει δυναμικά entities (tables)';
 COMMENT ON TABLE fields IS 'Meta-table: Ορίζει τα πεδία κάθε entity';
 COMMENT ON TABLE field_types IS 'Διαθέσιμοι τύποι πεδίων';

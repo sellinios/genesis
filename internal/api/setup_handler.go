@@ -29,7 +29,8 @@ func (h *SetupHandler) SetupPage(c *gin.Context) {
 	h.db.Model(&models.Tenant{}).Count(&count)
 
 	if count > 0 {
-		h.DashboardPage(c)
+		// Redirect to admin panel if setup is complete
+		c.Redirect(http.StatusFound, "/panel")
 		return
 	}
 
@@ -254,8 +255,8 @@ func (h *SetupHandler) SetupPage(c *gin.Context) {
             <div class="success">
                 <div class="success-icon">✓</div>
                 <h2>Setup Complete!</h2>
-                <p>Genesis is ready. You can now login with your admin credentials.</p>
-                <button class="btn btn-primary" onclick="window.location.href='/api/health'">Continue</button>
+                <p>Genesis is ready. Redirecting to Dashboard...</p>
+                <p id="countdown" style="color: #00d4ff; margin-top: 10px;">Redirecting in 3 seconds...</p>
             </div>
         </div>
     </div>
@@ -344,6 +345,19 @@ func (h *SetupHandler) SetupPage(c *gin.Context) {
                 document.getElementById('dot3').classList.remove('active');
                 document.getElementById('dot3').classList.add('done');
 
+                // Auto redirect to admin panel
+                let seconds = 3;
+                const countdownEl = document.getElementById('countdown');
+                const interval = setInterval(() => {
+                    seconds--;
+                    if (seconds <= 0) {
+                        clearInterval(interval);
+                        window.location.href = '/panel';
+                    } else {
+                        countdownEl.textContent = 'Redirecting in ' + seconds + ' seconds...';
+                    }
+                }, 1000);
+
             } catch (err) {
                 showError(err.message);
                 btn.disabled = false;
@@ -417,6 +431,26 @@ func (h *SetupHandler) DoSetup(c *gin.Context) {
 		h.db.Delete(&tenant)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create user: " + err.Error()})
 		return
+	}
+
+	// Create super_admin role and assign to user
+	role := models.Role{
+		ID:          uuid.New(),
+		TenantID:    tenant.ID,
+		Code:        "super_admin",
+		Name:        "Super Admin",
+		Description: "Full system access",
+		IsSystem:    true,
+	}
+
+	if err := h.db.Create(&role).Error; err != nil {
+		// Log but don't fail - role might already exist
+		fmt.Printf("Warning: Failed to create role: %v\n", err)
+	} else {
+		// Assign role to user via raw SQL (user_roles is a join table)
+		if err := h.db.Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", user.ID, role.ID).Error; err != nil {
+			fmt.Printf("Warning: Failed to assign role: %v\n", err)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

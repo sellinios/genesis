@@ -50,7 +50,9 @@ func startServer() {
 	adminHandler := api.NewAdminHandler(db)
 	authHandler := api.NewAuthHandler(db)
 	setupHandler := api.NewSetupHandler(db)
-	router := api.SetupRouter(handler, adminHandler, authHandler, setupHandler)
+	adminPanelHandler := api.NewAdminPanelHandler(db)
+	uiHandler := api.NewUIHandler(db)
+	router := api.SetupRouter(handler, adminHandler, authHandler, setupHandler, adminPanelHandler, uiHandler)
 
 	port := getEnv("PORT", "8090")
 	log.Printf("Server starting on port %s", port)
