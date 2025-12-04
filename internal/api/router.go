@@ -12,7 +12,7 @@ import (
 )
 
 // SetupRouter creates and configures the Gin router
-func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *AuthHandler, setupHandler *SetupHandler, adminPanelHandler *AdminPanelHandler, uiHandler *UIHandler, generatorHandler *GeneratorHandler) *gin.Engine {
+func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *AuthHandler, setupHandler *SetupHandler, adminPanelHandler *AdminPanelHandler, uiHandler *UIHandler, generatorHandler *GeneratorHandler, contentHandler *ContentHandler) *gin.Engine {
 	r := gin.Default()
 
 	// Setup wizard (only shows if no tenants exist)
@@ -131,6 +131,27 @@ func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *Auth
 	// Component bundle (public, cached)
 	r.GET("/bundle.js", generatorHandler.GetBundle)
 	r.GET("/components/:code", generatorHandler.GetComponent)
+
+	// ==========================================================================
+	// PUBLIC CONTENT API - For serving Aethra articles (no auth required)
+	// These endpoints mirror Aethra's public API for articles
+	// ==========================================================================
+	if contentHandler != nil {
+		publicContent := r.Group("/api/public")
+		{
+			// Article endpoints (same as Aethra)
+			publicContent.GET("/articles", contentHandler.GetArticles)
+			publicContent.GET("/articles/:slug", contentHandler.GetArticle)
+			publicContent.GET("/categories", contentHandler.GetCategories)
+		}
+
+		// Also support the shorter /api/articles routes (like Aethra)
+		r.GET("/api/articles", contentHandler.GetArticles)
+		r.GET("/api/articles/:slug", contentHandler.GetArticle)
+
+		// Static content endpoint
+		r.GET("/api/content/:slug", contentHandler.GetContent)
+	}
 
 	// ==========================================================================
 	// TENANT API - For tenant-specific operations

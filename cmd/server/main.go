@@ -4,6 +4,7 @@ package main
 import (
 	"bufio"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -15,6 +16,7 @@ import (
 	"github.com/aethra/genesis/internal/database"
 	"github.com/aethra/genesis/internal/engine"
 	"github.com/aethra/genesis/internal/models"
+	_ "github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -54,18 +56,67 @@ func startServer() {
 	uiHandler := api.NewUIHandler(db)
 	generatorHandler := api.NewGeneratorHandler(db)
 
+	// Connect to Aethra database for serving articles (optional)
+	var contentHandler *api.ContentHandler
+	aethraDB := connectAethraDB()
+	if aethraDB != nil {
+		contentHandler = api.NewContentHandlerWithAethra(db, aethraDB)
+		log.Println("Aethra database connected - article serving enabled")
+	} else {
+		log.Println("Aethra database not configured - article serving disabled")
+		contentHandler = nil
+	}
+
 	// Warmup: pre-compile components on startup
 	if err := generatorHandler.Warmup(); err != nil {
 		log.Printf("Warning: Component warmup failed: %v", err)
 	}
 
-	router := api.SetupRouter(handler, adminHandler, authHandler, setupHandler, adminPanelHandler, uiHandler, generatorHandler)
+	router := api.SetupRouter(handler, adminHandler, authHandler, setupHandler, adminPanelHandler, uiHandler, generatorHandler, contentHandler)
 
 	port := getEnv("PORT", "8090")
 	log.Printf("Server starting on port %s", port)
 	if err := router.Run(":" + port); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
+}
+
+// connectAethraDB connects to the Aethra internal database for serving articles
+// Uses same PostgreSQL server as Genesis (just different database name)
+// Returns nil if connection fails
+func connectAethraDB() *sql.DB {
+	// Use same credentials as Genesis DB, just different database name
+	host := os.Getenv("DB_HOST")
+	if host == "" {
+		return nil
+	}
+
+	port := getEnv("DB_PORT", "5432")
+	user := os.Getenv("DB_USER")
+	password := os.Getenv("DB_PASSWORD")
+	dbname := getEnv("AETHRA_DB_NAME", "aethra_internal")
+
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		host, port, user, password, dbname)
+
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		log.Printf("Warning: Could not connect to Aethra database: %v", err)
+		return nil
+	}
+
+	// Test connection
+	if err := db.Ping(); err != nil {
+		log.Printf("Warning: Aethra database ping failed: %v", err)
+		db.Close()
+		return nil
+	}
+
+	// Optimize connection pool for read-heavy workload
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+
+	return db
 }
 
 func connectDB() *gorm.DB {

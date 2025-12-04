@@ -1,0 +1,32 @@
+[Unit]
+Description=Genesis - Dynamic Business Platform
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=sellinios
+Group=sellinios
+WorkingDirectory=/opt/genesis
+ExecStart=/opt/genesis/bin/genesis
+Restart=always
+RestartSec=5
+
+# Environment - uses same PostgreSQL as Aethra
+Environment=DB_HOST=localhost
+Environment=DB_PORT=5433
+Environment=DB_USER=aethra_user
+Environment=DB_PASSWORD=aethra_secure_pass_2024
+Environment=DB_NAME=genesis
+Environment=AETHRA_DB_NAME=aethra_internal
+Environment=PORT=8090
+Environment=JWT_SECRET=genesis_jwt_secret_2024_secure
+Environment=GIN_MODE=release
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=genesis
+
+[Install]
+WantedBy=multi-user.target
