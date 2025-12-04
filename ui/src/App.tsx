@@ -79,7 +79,7 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/intranet">
       <AuthProvider>
         <AppRoutes />
       </AuthProvider>

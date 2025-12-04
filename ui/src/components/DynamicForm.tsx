@@ -20,11 +20,8 @@ export default function DynamicForm({
     if (!field.show_in_form) return null;
 
     const value = values[field.code] ?? '';
-    const error = errors[field.code];
 
-    const baseClasses = `w-full px-4 py-2.5 border rounded-lg text-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-      error ? 'border-red-300' : 'border-gray-300'
-    }`;
+    const baseClasses = `w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent`;
 
     switch (field.field_type) {
       case 'text':

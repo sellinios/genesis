@@ -22,6 +22,13 @@ func NewSetupHandler(db *gorm.DB) *SetupHandler {
 	return &SetupHandler{db: db}
 }
 
+// NeedsSetup returns true if no tenants exist yet
+func (h *SetupHandler) NeedsSetup() bool {
+	var count int64
+	h.db.Model(&models.Tenant{}).Count(&count)
+	return count == 0
+}
+
 // SetupPage serves the setup wizard HTML
 func (h *SetupHandler) SetupPage(c *gin.Context) {
 	// Get base path from reverse proxy header

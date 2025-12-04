@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useSchema } from '../contexts/SchemaContext';
 import api from '../lib/api';
-import Modal from '../components/Modal';
-import { Plus, Edit2, Trash2, Database, ChevronDown, ChevronRight, Settings } from 'lucide-react';
+import { Plus, Edit2, Trash2, Database, ChevronDown, ChevronRight, Settings, ArrowLeft } from 'lucide-react';
 import type { Entity, Field, FieldType } from '../types';
+
+type ViewMode = 'list' | 'entity-form' | 'field-form';
 
 export default function EntityDesigner() {
   const { modules, entities, loadSchema } = useSchema();
@@ -13,7 +14,7 @@ export default function EntityDesigner() {
   const [entityFields, setEntityFields] = useState<Field[]>([]);
   const [isLoadingFields, setIsLoadingFields] = useState(false);
 
-  const [isEntityModalOpen, setIsEntityModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editingEntity, setEditingEntity] = useState<Entity | null>(null);
   const [entityFormData, setEntityFormData] = useState({
     name: '',
@@ -24,7 +25,6 @@ export default function EntityDesigner() {
     is_active: true,
   });
 
-  const [isFieldModalOpen, setIsFieldModalOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
   const [fieldFormData, setFieldFormData] = useState({
     name: '',
@@ -106,7 +106,7 @@ export default function EntityDesigner() {
       module_id: moduleId,
       is_active: true,
     });
-    setIsEntityModalOpen(true);
+    setViewMode('entity-form');
   };
 
   const handleEditEntity = (entity: Entity) => {
@@ -119,7 +119,7 @@ export default function EntityDesigner() {
       module_id: entity.module_id,
       is_active: entity.is_active,
     });
-    setIsEntityModalOpen(true);
+    setViewMode('entity-form');
   };
 
   const handleDeleteEntity = async (entity: Entity) => {
@@ -154,7 +154,7 @@ export default function EntityDesigner() {
       } else {
         await api.createEntity(data);
       }
-      setIsEntityModalOpen(false);
+      setViewMode('list');
       await loadSchema();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');
@@ -181,7 +181,7 @@ export default function EntityDesigner() {
       default_value: '',
       validation_rules: '',
     });
-    setIsFieldModalOpen(true);
+    setViewMode('field-form');
   };
 
   const handleEditField = (field: Field) => {
@@ -199,7 +199,7 @@ export default function EntityDesigner() {
       default_value: field.default_value || '',
       validation_rules: field.validation_rules || '',
     });
-    setIsFieldModalOpen(true);
+    setViewMode('field-form');
   };
 
   const handleDeleteField = async (field: Field) => {
@@ -232,7 +232,7 @@ export default function EntityDesigner() {
       } else {
         await api.createField(data);
       }
-      setIsFieldModalOpen(false);
+      setViewMode('list');
       await loadEntityFields(selectedEntity.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');
@@ -241,10 +241,342 @@ export default function EntityDesigner() {
     }
   };
 
+  const handleCancel = () => {
+    setViewMode('list');
+    setError('');
+  };
+
   const getEntitiesByModule = (moduleId: string) => {
     return entities.filter(e => e.module_id === moduleId);
   };
 
+  // Entity Form View
+  if (viewMode === 'entity-form') {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleCancel}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {editingEntity ? 'Edit Entity' : 'New Entity'}
+            </h1>
+            <p className="text-gray-500 mt-1">
+              {editingEntity ? 'Update the entity details below' : 'Fill in the details to create a new entity'}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl">
+          {error && (
+            <div className="p-4 mb-6 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Module
+              </label>
+              <select
+                value={entityFormData.module_id}
+                onChange={e => setEntityFormData(prev => ({ ...prev, module_id: e.target.value }))}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                required
+              >
+                {modules.map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={entityFormData.name}
+                onChange={e => {
+                  setEntityFormData(prev => ({
+                    ...prev,
+                    name: e.target.value,
+                    code: prev.code || generateCode(e.target.value),
+                    table_name: prev.table_name || `t_${generateCode(e.target.value)}`,
+                  }));
+                }}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="e.g., Product"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={entityFormData.code}
+                  onChange={e => setEntityFormData(prev => ({ ...prev, code: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                  placeholder="e.g., product"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Table Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={entityFormData.table_name}
+                  onChange={e => setEntityFormData(prev => ({ ...prev, table_name: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                  placeholder="e.g., t_product"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Description
+              </label>
+              <textarea
+                value={entityFormData.description}
+                onChange={e => setEntityFormData(prev => ({ ...prev, description: e.target.value }))}
+                rows={3}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="entity_is_active"
+                checked={entityFormData.is_active}
+                onChange={e => setEntityFormData(prev => ({ ...prev, is_active: e.target.checked }))}
+                className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+              />
+              <label htmlFor="entity_is_active" className="text-sm text-gray-700">
+                Active
+              </label>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
+            <button
+              onClick={handleCancel}
+              className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveEntity}
+              disabled={isSaving}
+              className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Field Form View
+  if (viewMode === 'field-form') {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleCancel}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {editingField ? 'Edit Field' : 'New Field'}
+            </h1>
+            <p className="text-gray-500 mt-1">
+              {editingField ? 'Update the field details below' : `Add a new field to ${selectedEntity?.name}`}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl">
+          {error && (
+            <div className="p-4 mb-6 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={fieldFormData.name}
+                onChange={e => {
+                  setFieldFormData(prev => ({
+                    ...prev,
+                    name: e.target.value,
+                    code: prev.code || generateCode(e.target.value),
+                  }));
+                }}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="e.g., Product Name"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={fieldFormData.code}
+                  onChange={e => setFieldFormData(prev => ({ ...prev, code: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                  placeholder="e.g., product_name"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Field Type <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={fieldFormData.field_type_id}
+                  onChange={e => setFieldFormData(prev => ({ ...prev, field_type_id: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  required
+                >
+                  {fieldTypes.map(ft => (
+                    <option key={ft.id} value={ft.id}>{ft.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Description
+              </label>
+              <textarea
+                value={fieldFormData.description}
+                onChange={e => setFieldFormData(prev => ({ ...prev, description: e.target.value }))}
+                rows={2}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Default Value
+                </label>
+                <input
+                  type="text"
+                  value={fieldFormData.default_value}
+                  onChange={e => setFieldFormData(prev => ({ ...prev, default_value: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Sort Order
+                </label>
+                <input
+                  type="number"
+                  value={fieldFormData.sort_order}
+                  onChange={e => setFieldFormData(prev => ({ ...prev, sort_order: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-5">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="field_is_required"
+                    checked={fieldFormData.is_required}
+                    onChange={e => setFieldFormData(prev => ({ ...prev, is_required: e.target.checked }))}
+                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                  />
+                  <label htmlFor="field_is_required" className="text-sm text-gray-700">Required</label>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="field_is_unique"
+                    checked={fieldFormData.is_unique}
+                    onChange={e => setFieldFormData(prev => ({ ...prev, is_unique: e.target.checked }))}
+                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                  />
+                  <label htmlFor="field_is_unique" className="text-sm text-gray-700">Unique</label>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="field_show_in_list"
+                    checked={fieldFormData.show_in_list}
+                    onChange={e => setFieldFormData(prev => ({ ...prev, show_in_list: e.target.checked }))}
+                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                  />
+                  <label htmlFor="field_show_in_list" className="text-sm text-gray-700">Show in List</label>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="field_show_in_form"
+                    checked={fieldFormData.show_in_form}
+                    onChange={e => setFieldFormData(prev => ({ ...prev, show_in_form: e.target.checked }))}
+                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                  />
+                  <label htmlFor="field_show_in_form" className="text-sm text-gray-700">Show in Form</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
+            <button
+              onClick={handleCancel}
+              className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveField}
+              disabled={isSaving}
+              className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // List View
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-6">
       {/* Left Panel - Entity Tree */}
@@ -431,296 +763,6 @@ export default function EntityDesigner() {
           </div>
         )}
       </div>
-
-      {/* Entity Modal */}
-      <Modal
-        isOpen={isEntityModalOpen}
-        onClose={() => setIsEntityModalOpen(false)}
-        title={editingEntity ? 'Edit Entity' : 'New Entity'}
-        size="md"
-      >
-        {error && (
-          <div className="p-4 mb-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-            {error}
-          </div>
-        )}
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Module
-            </label>
-            <select
-              value={entityFormData.module_id}
-              onChange={e => setEntityFormData(prev => ({ ...prev, module_id: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              required
-            >
-              {modules.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={entityFormData.name}
-              onChange={e => {
-                setEntityFormData(prev => ({
-                  ...prev,
-                  name: e.target.value,
-                  code: prev.code || generateCode(e.target.value),
-                  table_name: prev.table_name || `t_${generateCode(e.target.value)}`,
-                }));
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="e.g., Product"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Code <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={entityFormData.code}
-                onChange={e => setEntityFormData(prev => ({ ...prev, code: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                placeholder="e.g., product"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Table Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={entityFormData.table_name}
-                onChange={e => setEntityFormData(prev => ({ ...prev, table_name: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                placeholder="e.g., t_product"
-                required
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <textarea
-              value={entityFormData.description}
-              onChange={e => setEntityFormData(prev => ({ ...prev, description: e.target.value }))}
-              rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="entity_is_active"
-              checked={entityFormData.is_active}
-              onChange={e => setEntityFormData(prev => ({ ...prev, is_active: e.target.checked }))}
-              className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-            />
-            <label htmlFor="entity_is_active" className="text-sm text-gray-700">
-              Active
-            </label>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
-          <button
-            onClick={() => setIsEntityModalOpen(false)}
-            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSaveEntity}
-            disabled={isSaving}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-          >
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </Modal>
-
-      {/* Field Modal */}
-      <Modal
-        isOpen={isFieldModalOpen}
-        onClose={() => setIsFieldModalOpen(false)}
-        title={editingField ? 'Edit Field' : 'New Field'}
-        size="md"
-      >
-        {error && (
-          <div className="p-4 mb-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-            {error}
-          </div>
-        )}
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={fieldFormData.name}
-              onChange={e => {
-                setFieldFormData(prev => ({
-                  ...prev,
-                  name: e.target.value,
-                  code: prev.code || generateCode(e.target.value),
-                }));
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="e.g., Product Name"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Code <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={fieldFormData.code}
-                onChange={e => setFieldFormData(prev => ({ ...prev, code: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                placeholder="e.g., product_name"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Field Type <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={fieldFormData.field_type_id}
-                onChange={e => setFieldFormData(prev => ({ ...prev, field_type_id: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                required
-              >
-                {fieldTypes.map(ft => (
-                  <option key={ft.id} value={ft.id}>{ft.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <textarea
-              value={fieldFormData.description}
-              onChange={e => setFieldFormData(prev => ({ ...prev, description: e.target.value }))}
-              rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Default Value
-              </label>
-              <input
-                type="text"
-                value={fieldFormData.default_value}
-                onChange={e => setFieldFormData(prev => ({ ...prev, default_value: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Sort Order
-              </label>
-              <input
-                type="number"
-                value={fieldFormData.sort_order}
-                onChange={e => setFieldFormData(prev => ({ ...prev, sort_order: parseInt(e.target.value) || 0 }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="field_is_required"
-                  checked={fieldFormData.is_required}
-                  onChange={e => setFieldFormData(prev => ({ ...prev, is_required: e.target.checked }))}
-                  className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                />
-                <label htmlFor="field_is_required" className="text-sm text-gray-700">Required</label>
-              </div>
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="field_is_unique"
-                  checked={fieldFormData.is_unique}
-                  onChange={e => setFieldFormData(prev => ({ ...prev, is_unique: e.target.checked }))}
-                  className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                />
-                <label htmlFor="field_is_unique" className="text-sm text-gray-700">Unique</label>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="field_show_in_list"
-                  checked={fieldFormData.show_in_list}
-                  onChange={e => setFieldFormData(prev => ({ ...prev, show_in_list: e.target.checked }))}
-                  className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                />
-                <label htmlFor="field_show_in_list" className="text-sm text-gray-700">Show in List</label>
-              </div>
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="field_show_in_form"
-                  checked={fieldFormData.show_in_form}
-                  onChange={e => setFieldFormData(prev => ({ ...prev, show_in_form: e.target.checked }))}
-                  className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                />
-                <label htmlFor="field_show_in_form" className="text-sm text-gray-700">Show in Form</label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
-          <button
-            onClick={() => setIsFieldModalOpen(false)}
-            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSaveField}
-            disabled={isSaving}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-          >
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </Modal>
     </div>
   );
 }

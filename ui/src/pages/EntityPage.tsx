@@ -4,9 +4,10 @@ import { useSchema } from '../contexts/SchemaContext';
 import api from '../lib/api';
 import DataTable from '../components/DataTable';
 import DynamicForm from '../components/DynamicForm';
-import Modal from '../components/Modal';
-import { Plus, RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw, ArrowLeft } from 'lucide-react';
 import type { Field } from '../types';
+
+type ViewMode = 'list' | 'create' | 'edit';
 
 export default function EntityPage() {
   const { entityCode } = useParams<{ entityCode: string }>();
@@ -18,7 +19,7 @@ export default function EntityPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editingRecord, setEditingRecord] = useState<Record<string, unknown> | null>(null);
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -26,6 +27,7 @@ export default function EntityPage() {
   useEffect(() => {
     if (entityCode) {
       loadData();
+      setViewMode('list');
     }
   }, [entityCode]);
 
@@ -53,13 +55,19 @@ export default function EntityPage() {
   const handleCreate = () => {
     setEditingRecord(null);
     setFormData({});
-    setIsModalOpen(true);
+    setViewMode('create');
   };
 
   const handleEdit = (record: Record<string, unknown>) => {
     setEditingRecord(record);
     setFormData({ ...record });
-    setIsModalOpen(true);
+    setViewMode('edit');
+  };
+
+  const handleCancel = () => {
+    setViewMode('list');
+    setEditingRecord(null);
+    setFormData({});
   };
 
   const handleDelete = async (record: Record<string, unknown>) => {
@@ -85,7 +93,7 @@ export default function EntityPage() {
       } else {
         await api.createRecord(entityCode, formData);
       }
-      setIsModalOpen(false);
+      setViewMode('list');
       await loadData();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to save');
@@ -102,6 +110,57 @@ export default function EntityPage() {
     );
   }
 
+  // Form view (create or edit)
+  if (viewMode === 'create' || viewMode === 'edit') {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleCancel}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {viewMode === 'edit' ? 'Edit' : 'Create'} {entity?.name || entityCode}
+            </h1>
+            <p className="text-gray-500 mt-1">
+              {viewMode === 'edit' ? 'Update the record details below' : 'Fill in the details to create a new record'}
+            </p>
+          </div>
+        </div>
+
+        {/* Form */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <DynamicForm
+            fields={fields}
+            values={formData}
+            onChange={setFormData}
+          />
+
+          <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
+            <button
+              onClick={handleCancel}
+              className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // List view
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -160,35 +219,6 @@ export default function EntityPage() {
           )}
         </div>
       )}
-
-      {/* Create/Edit Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={editingRecord ? 'Edit Record' : 'Create New Record'}
-        size="lg"
-      >
-        <DynamicForm
-          fields={fields}
-          values={formData}
-          onChange={setFormData}
-        />
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
-          <button
-            onClick={() => setIsModalOpen(false)}
-            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-          >
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </Modal>
     </div>
   );
 }

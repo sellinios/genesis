@@ -36,6 +36,20 @@ func (h *AdminHandler) ListTenants(c *gin.Context) {
 	c.JSON(http.StatusOK, tenants)
 }
 
+// ListTenantsPublic returns active tenants (public - for login page)
+// GET /api/tenants
+func (h *AdminHandler) ListTenantsPublic(c *gin.Context) {
+	var tenants []struct {
+		ID   uuid.UUID `json:"id"`
+		Name string    `json:"name"`
+	}
+	if err := h.db.Table("tenants").Select("id, name").Where("is_active = ?", true).Find(&tenants).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tenants": tenants})
+}
+
 // GetTenant returns a single tenant
 // GET /admin/tenants/:id
 func (h *AdminHandler) GetTenant(c *gin.Context) {

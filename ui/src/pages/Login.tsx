@@ -21,8 +21,8 @@ export default function Login() {
   }, [isAuthenticated, navigate]);
 
   useEffect(() => {
-    // Load tenants for selection
-    api.getTenants()
+    // Load tenants for selection (public endpoint)
+    api.getTenantsPublic()
       .then(result => {
         setTenants(result.tenants || []);
         if (result.tenants?.length === 1) {

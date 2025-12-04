@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { useSchema } from '../contexts/SchemaContext';
 import api from '../lib/api';
-import Modal from '../components/Modal';
-import { Plus, Edit2, Trash2, Layers, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, Layers, ToggleLeft, ToggleRight, ArrowLeft } from 'lucide-react';
 import type { Module } from '../types';
+
+type ViewMode = 'list' | 'create' | 'edit';
 
 export default function ModuleDesigner() {
   const { modules, loadSchema } = useSchema();
   const [error, setError] = useState('');
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editingModule, setEditingModule] = useState<Module | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -31,7 +32,7 @@ export default function ModuleDesigner() {
       sort_order: modules.length,
       is_active: true,
     });
-    setIsModalOpen(true);
+    setViewMode('create');
   };
 
   const handleEdit = (module: Module) => {
@@ -44,7 +45,13 @@ export default function ModuleDesigner() {
       sort_order: module.sort_order || 0,
       is_active: module.is_active,
     });
-    setIsModalOpen(true);
+    setViewMode('edit');
+  };
+
+  const handleCancel = () => {
+    setViewMode('list');
+    setEditingModule(null);
+    setError('');
   };
 
   const handleDelete = async (module: Module) => {
@@ -79,7 +86,7 @@ export default function ModuleDesigner() {
       } else {
         await api.createModule(formData);
       }
-      setIsModalOpen(false);
+      setViewMode('list');
       await loadSchema();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');
@@ -95,6 +102,155 @@ export default function ModuleDesigner() {
       .replace(/^_|_$/g, '');
   };
 
+  // Form view (create or edit)
+  if (viewMode === 'create' || viewMode === 'edit') {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleCancel}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {viewMode === 'edit' ? 'Edit Module' : 'New Module'}
+            </h1>
+            <p className="text-gray-500 mt-1">
+              {viewMode === 'edit' ? 'Update the module details below' : 'Fill in the details to create a new module'}
+            </p>
+          </div>
+        </div>
+
+        {/* Form */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl">
+          {error && (
+            <div className="p-4 mb-6 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={e => {
+                  setFormData(prev => ({
+                    ...prev,
+                    name: e.target.value,
+                    code: prev.code || generateCode(e.target.value),
+                  }));
+                }}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="e.g., Inventory"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Code <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.code}
+                onChange={e => setFormData(prev => ({ ...prev, code: e.target.value }))}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                placeholder="e.g., inventory"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1.5">
+                Unique identifier for this module (lowercase, no spaces)
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Description
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                rows={3}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="What this module is for..."
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Icon
+                </label>
+                <select
+                  value={formData.icon}
+                  onChange={e => setFormData(prev => ({ ...prev, icon: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="Layers">Layers</option>
+                  <option value="Database">Database</option>
+                  <option value="Users">Users</option>
+                  <option value="Settings">Settings</option>
+                  <option value="FileText">FileText</option>
+                  <option value="ShoppingCart">ShoppingCart</option>
+                  <option value="Package">Package</option>
+                  <option value="Briefcase">Briefcase</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Sort Order
+                </label>
+                <input
+                  type="number"
+                  value={formData.sort_order}
+                  onChange={e => setFormData(prev => ({ ...prev, sort_order: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="is_active"
+                checked={formData.is_active}
+                onChange={e => setFormData(prev => ({ ...prev, is_active: e.target.checked }))}
+                className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+              />
+              <label htmlFor="is_active" className="text-sm text-gray-700">
+                Active (visible in sidebar)
+              </label>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
+            <button
+              onClick={handleCancel}
+              className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // List view
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -174,134 +330,6 @@ export default function ModuleDesigner() {
           </div>
         )}
       </div>
-
-      {/* Create/Edit Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={editingModule ? 'Edit Module' : 'New Module'}
-        size="md"
-      >
-        {error && (
-          <div className="p-4 mb-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-            {error}
-          </div>
-        )}
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={e => {
-                setFormData(prev => ({
-                  ...prev,
-                  name: e.target.value,
-                  code: prev.code || generateCode(e.target.value),
-                }));
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="e.g., Inventory"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Code <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.code}
-              onChange={e => setFormData(prev => ({ ...prev, code: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-              placeholder="e.g., inventory"
-              required
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Unique identifier for this module (lowercase, no spaces)
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <textarea
-              value={formData.description}
-              onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="What this module is for..."
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Icon
-              </label>
-              <select
-                value={formData.icon}
-                onChange={e => setFormData(prev => ({ ...prev, icon: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="Layers">Layers</option>
-                <option value="Database">Database</option>
-                <option value="Users">Users</option>
-                <option value="Settings">Settings</option>
-                <option value="FileText">FileText</option>
-                <option value="ShoppingCart">ShoppingCart</option>
-                <option value="Package">Package</option>
-                <option value="Briefcase">Briefcase</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Sort Order
-              </label>
-              <input
-                type="number"
-                value={formData.sort_order}
-                onChange={e => setFormData(prev => ({ ...prev, sort_order: parseInt(e.target.value) || 0 }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="is_active"
-              checked={formData.is_active}
-              onChange={e => setFormData(prev => ({ ...prev, is_active: e.target.checked }))}
-              className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-            />
-            <label htmlFor="is_active" className="text-sm text-gray-700">
-              Active (visible in sidebar)
-            </label>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
-          <button
-            onClick={() => setIsModalOpen(false)}
-            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-          >
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </Modal>
     </div>
   );
 }

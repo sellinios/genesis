@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import api from '../lib/api';
-import Modal from '../components/Modal';
-import { Plus, RefreshCw, Edit2, Trash2, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { Plus, RefreshCw, Edit2, Trash2, Eye, EyeOff, ExternalLink, ArrowLeft } from 'lucide-react';
 import type { Article, Website, Category } from '../types';
+
+type ViewMode = 'list' | 'create' | 'edit';
 
 export default function Articles() {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -11,7 +12,7 @@ export default function Articles() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
   const [formData, setFormData] = useState({
     title: '',
@@ -62,7 +63,7 @@ export default function Articles() {
       meta_title: '',
       meta_description: '',
     });
-    setIsModalOpen(true);
+    setViewMode('create');
   };
 
   const handleEdit = (article: Article) => {
@@ -77,7 +78,12 @@ export default function Articles() {
       meta_title: article.meta_title || '',
       meta_description: article.meta_description || '',
     });
-    setIsModalOpen(true);
+    setViewMode('edit');
+  };
+
+  const handleCancel = () => {
+    setViewMode('list');
+    setEditingArticle(null);
   };
 
   const handleDelete = async (article: Article) => {
@@ -112,7 +118,7 @@ export default function Articles() {
       } else {
         await api.createArticle(formData);
       }
-      setIsModalOpen(false);
+      setViewMode('list');
       await loadData();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to save');
@@ -128,6 +134,169 @@ export default function Articles() {
       .replace(/^-|-$/g, '');
   };
 
+  // Form view (create or edit)
+  if (viewMode === 'create' || viewMode === 'edit') {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleCancel}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {viewMode === 'edit' ? 'Edit Article' : 'New Article'}
+            </h1>
+            <p className="text-gray-500 mt-1">
+              {viewMode === 'edit' ? 'Update the article details below' : 'Fill in the details to create a new article'}
+            </p>
+          </div>
+        </div>
+
+        {/* Form */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Title <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.title}
+                  onChange={e => {
+                    setFormData(prev => ({
+                      ...prev,
+                      title: e.target.value,
+                      slug: prev.slug || generateSlug(e.target.value),
+                    }));
+                  }}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Slug <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.slug}
+                  onChange={e => setFormData(prev => ({ ...prev, slug: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Website <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.website_id}
+                  onChange={e => setFormData(prev => ({ ...prev, website_id: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  required
+                >
+                  <option value="">Select website</option>
+                  {websites.map(w => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Category
+                </label>
+                <select
+                  value={formData.category_id}
+                  onChange={e => setFormData(prev => ({ ...prev, category_id: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Select category</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Excerpt
+              </label>
+              <textarea
+                value={formData.excerpt}
+                onChange={e => setFormData(prev => ({ ...prev, excerpt: e.target.value }))}
+                rows={3}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Content
+              </label>
+              <textarea
+                value={formData.content}
+                onChange={e => setFormData(prev => ({ ...prev, content: e.target.value }))}
+                rows={15}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Meta Title
+                </label>
+                <input
+                  type="text"
+                  value={formData.meta_title}
+                  onChange={e => setFormData(prev => ({ ...prev, meta_title: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Meta Description
+                </label>
+                <input
+                  type="text"
+                  value={formData.meta_description}
+                  onChange={e => setFormData(prev => ({ ...prev, meta_description: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
+            <button
+              onClick={handleCancel}
+              className="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // List view
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -262,148 +431,6 @@ export default function Articles() {
           </table>
         </div>
       )}
-
-      {/* Create/Edit Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={editingArticle ? 'Edit Article' : 'New Article'}
-        size="xl"
-      >
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Title <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.title}
-                onChange={e => {
-                  setFormData(prev => ({
-                    ...prev,
-                    title: e.target.value,
-                    slug: prev.slug || generateSlug(e.target.value),
-                  }));
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Slug <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.slug}
-                onChange={e => setFormData(prev => ({ ...prev, slug: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Website <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.website_id}
-                onChange={e => setFormData(prev => ({ ...prev, website_id: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                required
-              >
-                <option value="">Select website</option>
-                {websites.map(w => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Category
-              </label>
-              <select
-                value={formData.category_id}
-                onChange={e => setFormData(prev => ({ ...prev, category_id: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">Select category</option>
-                {categories.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Excerpt
-            </label>
-            <textarea
-              value={formData.excerpt}
-              onChange={e => setFormData(prev => ({ ...prev, excerpt: e.target.value }))}
-              rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Content
-            </label>
-            <textarea
-              value={formData.content}
-              onChange={e => setFormData(prev => ({ ...prev, content: e.target.value }))}
-              rows={10}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Meta Title
-              </label>
-              <input
-                type="text"
-                value={formData.meta_title}
-                onChange={e => setFormData(prev => ({ ...prev, meta_title: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Meta Description
-              </label>
-              <input
-                type="text"
-                value={formData.meta_description}
-                onChange={e => setFormData(prev => ({ ...prev, meta_description: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
-          <button
-            onClick={() => setIsModalOpen(false)}
-            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-          >
-            {isSaving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </Modal>
     </div>
   );
 }

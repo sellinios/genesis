@@ -1,7 +1,7 @@
 // API Client for Genesis
 import type { Schema, EntitySchema, Article, Website, Category, User, Tenant, Field, FieldType } from '../types';
 
-const API_BASE = '';
+const API_BASE = '/intranet';
 
 class ApiClient {
   private token: string | null = null;
@@ -217,9 +217,14 @@ class ApiClient {
     return this.fetch('GET', '/api/admin/categories');
   }
 
-  // Tenants (for setup)
+  // Tenants (for setup - requires auth)
   async getTenants(): Promise<{ tenants: Tenant[] }> {
     return this.fetch('GET', '/admin/tenants');
+  }
+
+  // Tenants public (for login page - no auth)
+  async getTenantsPublic(): Promise<{ tenants: { id: string; name: string }[] }> {
+    return this.fetch('GET', '/api/tenants');
   }
 }
 

@@ -2,7 +2,9 @@
 package api
 
 import (
+	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,17 +19,45 @@ func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *Auth
 
 	// Setup wizard (only shows if no tenants exist)
 	// After setup, redirects to admin panel
-	r.GET("/", setupHandler.SetupPage)
 	r.GET("/setup", setupHandler.SetupPage)
 	r.POST("/setup", setupHandler.DoSetup)
 
-	// Admin Panel UI (for config)
+	// Admin Panel UI (for config) - legacy
 	r.GET("/panel", adminPanelHandler.AdminPanel)
 
-	// Dynamic App UI (React from database)
-	r.GET("/login", uiHandler.LoginPage)
-	r.GET("/app", uiHandler.AppPage)
-	r.GET("/app/*path", uiHandler.AppPage)
+	// ==========================================================================
+	// VITE SPA - Serve the React frontend from ui/dist
+	// ==========================================================================
+	uiDistPath := "./ui/dist"
+
+	// Serve static assets (JS, CSS, images) - with /intranet prefix for nginx proxy
+	r.Static("/intranet/assets", filepath.Join(uiDistPath, "assets"))
+	r.StaticFile("/intranet/vite.svg", filepath.Join(uiDistPath, "vite.svg"))
+	// Also serve without prefix for direct access
+	r.Static("/assets", filepath.Join(uiDistPath, "assets"))
+	r.StaticFile("/vite.svg", filepath.Join(uiDistPath, "vite.svg"))
+
+	// SPA fallback handler for all frontend routes
+	spaHandler := func(c *gin.Context) {
+		c.File(filepath.Join(uiDistPath, "index.html"))
+	}
+
+	// Root redirects to /app (or setup if no tenant)
+	r.GET("/", func(c *gin.Context) {
+		// Check if tenant exists
+		if setupHandler.NeedsSetup() {
+			basePath := c.GetHeader("X-Forwarded-Prefix")
+			c.Redirect(http.StatusFound, basePath+"/setup")
+			return
+		}
+		basePath := c.GetHeader("X-Forwarded-Prefix")
+		c.Redirect(http.StatusFound, basePath+"/app")
+	})
+
+	// SPA routes - serve index.html for client-side routing
+	r.GET("/login", spaHandler)
+	r.GET("/app", spaHandler)
+	r.GET("/app/*path", spaHandler)
 
 	// CORS configuration - properly configured for security
 	// When credentials are used, specific origins must be provided (not *)
@@ -57,6 +87,9 @@ func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *Auth
 
 	// Health check (no auth required)
 	r.GET("/api/health", handler.Health)
+
+	// Public tenants list (for login page - no auth required)
+	r.GET("/api/tenants", adminHandler.ListTenantsPublic)
 
 	// ==========================================================================
 	// AUTH API - Authentication endpoints (no auth required)
@@ -208,6 +241,19 @@ func SetupRouter(handler *Handler, adminHandler *AdminHandler, authHandler *Auth
 			data.POST("/:entity/bulk-delete", handler.PermissionMiddleware(auth.ActionDelete), handler.BulkDelete)
 		}
 	}
+
+	// ==========================================================================
+	// SPA FALLBACK - Handle all other routes as SPA (must be last)
+	// ==========================================================================
+	r.NoRoute(func(c *gin.Context) {
+		path := c.Request.URL.Path
+		// Serve SPA for frontend routes (not API routes)
+		if !strings.HasPrefix(path, "/api/") && !strings.HasPrefix(path, "/auth/") {
+			c.File(filepath.Join(uiDistPath, "index.html"))
+			return
+		}
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+	})
 
 	return r
 }
