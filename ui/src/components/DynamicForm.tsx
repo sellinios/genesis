@@ -1,59 +1,19 @@
-import { useState, useEffect } from 'react';
 import type { Field } from '../types';
 
 interface DynamicFormProps {
   fields: Field[];
-  initialValues?: Record<string, unknown>;
-  onSubmit: (values: Record<string, unknown>) => Promise<void>;
-  onCancel: () => void;
-  isLoading?: boolean;
+  values: Record<string, unknown>;
+  onChange: (values: Record<string, unknown>) => void;
 }
 
 export default function DynamicForm({
   fields,
-  initialValues = {},
-  onSubmit,
-  onCancel,
-  isLoading = false,
+  values,
+  onChange,
 }: DynamicFormProps) {
-  const [values, setValues] = useState<Record<string, unknown>>(initialValues);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    setValues(initialValues);
-  }, [initialValues]);
 
   const handleChange = (code: string, value: unknown) => {
-    setValues(prev => ({ ...prev, [code]: value }));
-    if (errors[code]) {
-      setErrors(prev => {
-        const next = { ...prev };
-        delete next[code];
-        return next;
-      });
-    }
-  };
-
-  const validate = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    fields.forEach(field => {
-      if (field.is_required && field.show_in_form) {
-        const value = values[field.code];
-        if (value === undefined || value === null || value === '') {
-          newErrors[field.code] = `${field.name} is required`;
-        }
-      }
-    });
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
-    await onSubmit(values);
+    onChange({ ...values, [code]: value });
   };
 
   const renderField = (field: Field) => {
@@ -167,7 +127,7 @@ export default function DynamicForm({
   const formFields = fields.filter(f => f.show_in_form).sort((a, b) => a.sort_order - b.sort_order);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <div className="space-y-5">
       {formFields.map(field => (
         <div key={field.id}>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -175,28 +135,8 @@ export default function DynamicForm({
             {field.is_required && <span className="text-red-500 ml-1">*</span>}
           </label>
           {renderField(field)}
-          {errors[field.code] && (
-            <p className="mt-1 text-sm text-red-600">{errors[field.code]}</p>
-          )}
         </div>
       ))}
-
-      <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isLoading ? 'Saving...' : 'Save'}
-        </button>
-      </div>
-    </form>
+    </div>
   );
 }

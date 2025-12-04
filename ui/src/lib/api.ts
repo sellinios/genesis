@@ -1,5 +1,5 @@
 // API Client for Genesis
-import type { Schema, EntitySchema, Article, Website, Category, User, Tenant } from '../types';
+import type { Schema, EntitySchema, Article, Website, Category, User, Tenant, Field, FieldType } from '../types';
 
 const API_BASE = '';
 
@@ -128,11 +128,11 @@ class ApiClient {
     return this.fetch('GET', '/admin/modules');
   }
 
-  async createModule(data: { name: string; code: string; description?: string; icon?: string }): Promise<{ id: string }> {
+  async createModule(data: Record<string, unknown>): Promise<{ id: string }> {
     return this.fetch('POST', '/admin/modules', data);
   }
 
-  async updateModule(id: string, data: { name: string; code: string; description?: string; icon?: string }): Promise<void> {
+  async updateModule(id: string, data: Record<string, unknown>): Promise<void> {
     return this.fetch('PUT', `/admin/modules/${id}`, data);
   }
 
@@ -145,11 +145,11 @@ class ApiClient {
     return this.fetch('GET', '/admin/entities');
   }
 
-  async createEntity(data: { module_id: string; name: string; code: string; table_name: string; description?: string }): Promise<{ id: string }> {
+  async createEntity(data: Record<string, unknown>): Promise<{ id: string }> {
     return this.fetch('POST', '/admin/entities', data);
   }
 
-  async updateEntity(id: string, data: { name: string; code: string; table_name: string; description?: string }): Promise<void> {
+  async updateEntity(id: string, data: Record<string, unknown>): Promise<void> {
     return this.fetch('PUT', `/admin/entities/${id}`, data);
   }
 
@@ -158,16 +158,16 @@ class ApiClient {
   }
 
   // Admin - Fields
-  async getFields(entityId?: string): Promise<{ fields: { id: string; entity_id: string; name: string; code: string; field_type: string }[] }> {
+  async getFields(entityId?: string): Promise<{ fields: Field[] }> {
     const query = entityId ? `?entity_id=${entityId}` : '';
     return this.fetch('GET', `/admin/fields${query}`);
   }
 
-  async createField(data: { entity_id: string; name: string; code: string; field_type: string; is_required?: boolean }): Promise<{ id: string }> {
+  async createField(data: Record<string, unknown>): Promise<{ id: string }> {
     return this.fetch('POST', '/admin/fields', data);
   }
 
-  async updateField(id: string, data: { name: string; code: string; field_type: string; is_required?: boolean }): Promise<void> {
+  async updateField(id: string, data: Record<string, unknown>): Promise<void> {
     return this.fetch('PUT', `/admin/fields/${id}`, data);
   }
 
@@ -175,7 +175,7 @@ class ApiClient {
     return this.fetch('DELETE', `/admin/fields/${id}`);
   }
 
-  async getFieldTypes(): Promise<{ field_types: { code: string; name: string; component: string }[] }> {
+  async getFieldTypes(): Promise<{ field_types: FieldType[] }> {
     return this.fetch('GET', '/admin/field-types');
   }
 

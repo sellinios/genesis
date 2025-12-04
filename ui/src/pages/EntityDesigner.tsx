@@ -3,7 +3,7 @@ import { useSchema } from '../contexts/SchemaContext';
 import api from '../lib/api';
 import Modal from '../components/Modal';
 import { Plus, Edit2, Trash2, Database, ChevronDown, ChevronRight, Settings } from 'lucide-react';
-import type { Entity, Field, FieldType, Module } from '../types';
+import type { Entity, Field, FieldType } from '../types';
 
 export default function EntityDesigner() {
   const { modules, entities, loadSchema } = useSchema();

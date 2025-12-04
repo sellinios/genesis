@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import type { Module, Entity, Schema } from '../types';
+import type { Module, Entity } from '../types';
 import api from '../lib/api';
 import { useAuth } from './AuthContext';
 
@@ -7,7 +7,7 @@ interface SchemaContextType {
   modules: Module[];
   entities: Entity[];
   isLoading: boolean;
-  reload: () => Promise<void>;
+  loadSchema: () => Promise<void>;
   getEntitiesByModule: (moduleId: string) => Entity[];
   getModuleByCode: (code: string) => Module | undefined;
   getEntityByCode: (code: string) => Entity | undefined;
@@ -58,7 +58,7 @@ export function SchemaProvider({ children }: { children: ReactNode }) {
         modules,
         entities,
         isLoading,
-        reload: loadSchema,
+        loadSchema,
         getEntitiesByModule,
         getModuleByCode,
         getEntityByCode,

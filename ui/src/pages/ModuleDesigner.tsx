@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useSchema } from '../contexts/SchemaContext';
 import api from '../lib/api';
 import Modal from '../components/Modal';
@@ -7,7 +7,6 @@ import type { Module } from '../types';
 
 export default function ModuleDesigner() {
   const { modules, loadSchema } = useSchema();
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
